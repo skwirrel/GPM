@@ -53,6 +53,8 @@ const commands = [
     [ 'playMusic'     , '$please $canYou play [me] (something:<theRest>)'],
     [ 'howAreYou'     , 'how [are] you [feeling] [today|now|at the moment|]'],
     [ 'rollDice'      , '$please $canYou [roll [me]|romy] (number:[[1:a|one|1]|[2:2|two|a pair of]|[3:3|three]|[4:4|four]]) dice [for me]'],
+    [ 'tossCoin'      , '$please $canYou toss [me] a coin [for me]'],
+    [ 'spell'         , '$please $canYou [tell me] how [does one|should I|[do] you|to] spell (word:<theRest>)'],
 ];
 
 const commandHandlers = {
@@ -106,6 +108,16 @@ const commandHandlers = {
     		manager.say(answer,true,callback);
         });
 	},
+	'tossCoin' : function( matchDetails, manager, callback ) {
+        manager.play('sounds/coinToss.mp3',function(){
+            answer = Math.random()>0.5 ? 'heads' : 'tails';
+            manager.say("It's "+answer,true,callback);
+        });
+	},
+	'spell' : function( matchDetails, manager, callback ) {
+        word = matchDetails.word;
+        manager.say('"'+word+'" is spelled: '+word.replace(/(.)/g,'$1,'),false,callback);
+    },
 };
 
 const multiPattern = new Pattern.MultiPattern({
