@@ -51,6 +51,8 @@ const commands = [
     [ 'playMusic'     , '$please $canYou play [me] the album (album:<theRest>)'],
     [ 'playMusic'     , '$please $canYou play [me] [the [track|song]] (song:<theRest>)'],
     [ 'playMusic'     , '$please $canYou play [me] (something:<theRest>)'],
+    [ 'howAreYou'     , 'how [are] you [feeling] [today|now|at the moment|]'],
+    [ 'rollDice'      , '$please $canYou [roll [me]|romy] (number:[[1:a|one|1]|[2:2|two|a pair of]|[3:3|three]|[4:4|four]]) dice [for me]'],
 ];
 
 const commandHandlers = {
@@ -67,19 +69,42 @@ const commandHandlers = {
 	},
 	'whatTimeIsIt' : function( matchDetails, manager, callback ) {
 		const date = new Date();
-		var hours = date.getHours();
-		var minutes = date.getMinutes();
-		var ampm = hours >= 12 ? 'pm' : 'am';
-		hours = hours % 12;
-		hours = hours ? hours : 12; // the hour '0' should be '12'
-		
-		manager.say('The time is '+hours+' '+minutes+' '+ampm,true,callback);		
+		let hours = date.getHours();
+		let minutes = date.getMinutes();
+        if (minutes<10) minutes = '0'+minutes;
+        if (minutes==45) hours = (hours+1) % 24;
+
+        if (hours==0) hours = 'midnight';
+		else if (hours>12) hours -= 12;
+
+        let time;	
+        if (minutes==45) time = 'quarter to  '+hours;
+        else if (minutes==30) time = 'half past '+hours;
+        else if (minutes==15) time = 'quarter past '+hours;
+        else if (minutes==0) time = hours + "o'clock";
+        else time = hours+' '+minutes;
+
+        let timeIs = Math.random()<0.5 ? "It's":'The time is';
+		manager.say(timeIs+' '+time,true,callback);		
 	},
 	'playMusic' : function( matchDetails, manager, callback ) {
 		let type = Object.keys(matchDetails)[0];
 		let name = matchDetails[type];
 		console.log('Playing '+type+':'+name);
 		manager.say('Playing '+type+':'+name,true,callback);
+	},
+	'howAreYou' : function( matchDetails, manager, callback ) {
+		manager.say("I'm fine. Thanks for asking!",true,callback);
+	},
+	'rollDice' : function( matchDetails, manager, callback ) {
+        let numDice = parseInt(matchDetails.number);
+        manager.play('sounds/diceRoll.mp3',function(){
+            number = Math.floor(Math.random()*6*numDice)+1;
+            let answer;
+            if (numDice==1) answer = "It's a "+number;
+            else answer = number;
+    		manager.say(answer,true,callback);
+        });
 	},
 };
 
@@ -95,6 +120,17 @@ function Assistant( manager ) {
     this.manager = manager;
     this.listening = false;
     this.hearBuffer = '';
+    this.listener = false;
+    this.listenerStarted = false;
+    this.spawnListener();
+}
+
+Assistant.prototype.spawnListener = function() {
+
+    if (this.listener) {
+        this.listener.kill();
+    }
+
     this.listener = spawn('python3',['tasks/listener.py']);
     this.listener.stdin.setEncoding('utf-8');
     
@@ -110,15 +146,30 @@ function Assistant( manager ) {
         }
     });
     this.listener.stderr.on('data',function(data) {
-        // console.log('Listener error:'+data);
+        data = data.toString().trim();
+        if (!self.listenerStarted) {
+            if (data.toString()=='STARTED') {
+                self.listenerStarted=true;
+                console.log('Listener started');
+            }
+        } else {
+            console.log('Listener debug:'+data);
+        }
     });
+    this.listener.on('exit',function(){
+        console.log('respawning listener');
+        self.listenerStarted=false;
+        self.spawnListener();
+    })
+
+    // If we were in the middle of listening when it died start listening again...
+    if (this.listening) this.listen()
 }
 
 Assistant.prototype.run = function( parameters ) {
     console.log('Running Assistant ')
 
-    
-    spawn('/usr/bin/play', ['bleep.mp3']);
+    this.manager.play('sounds/bleep.mp3');
     this.listen();
 }
 
@@ -130,17 +181,15 @@ Assistant.prototype.listen = function( ) {
 }
 
 Assistant.prototype.done = function() {
-    spawn('/usr/bin/play', ['bloop.mp3']);
-    // Wait for bloop to finish playing until we finally relinquish control
     var self = this;
-
-    setTimeout( function(){
+    this.manager.play('sounds/bloop.mp3',function(){
+        // Wait for bloop to finish playing until we finally relinquish control
 		console.log('Assistant finished');
         self.manager.done();
-    }, 500);
+    });
 }
 
-const stopWords = [ 'ok','nothing','forget it','thats all','thanks' ]
+const stopWords = [ 'thats all','thats all thanks','stop','ok','ok thanks','nothing','forget it','thanks' ]
 Assistant.prototype.heard = function( utterance ) {
     var self = this;
     this.listening = false;

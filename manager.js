@@ -30,12 +30,20 @@ Manager.prototype.say = function( utterance, chachable, callback ) {
 	this.listener.stdin.write( chachable+':'+utterance+"\n" );
 }
 
+Manager.prototype.play = function( file, callback  ) {
+    let child = spawn('/usr/bin/play', [file]);
+    if (callback) {
+        child.on('exit',callback);
+    }
+}
+
+
 Manager.prototype.enqueue = function( task, state ) {
 	this.queue.push( [ task, state ] );
 	if (!this.busy) this.processQueue();
 }
 
-Manager.prototype.processQueue = function( ) {
+Manager.prototype.processQueue = function( justFinishedPreviousJob ) {
 	if (this.busy) return false;
 	if (!this.queue.length) return false;
 	
@@ -50,8 +58,9 @@ Manager.prototype.processQueue = function( ) {
 		var self = this;
 		setTimeout( function(){self.processQueue()}, Math.random(100) );
 	} else {
-		this.running = task;	
-		tasks[task].run( state );
+		this.running = task;
+        // if one job is running straight after another add a slight pause inbetween
+        setTimeout(function(){ tasks[task].run( state ); },justFinishedPreviousJob?500:0);
 	}
 }
 
@@ -59,7 +68,7 @@ Manager.prototype.done = function() {
 	console.log('Finished running: '+this.running);
 	this.busy--;
 	this.running = '';
-	this.processQueue();
+	this.processQueue(true);
 }
 
 
@@ -74,6 +83,6 @@ tasks['Assistant'] = new task( manager );
 let triggerHandler = require('./triggers/WakeWord.js');
 triggers.push( new triggerHandler( manager ) );
 
-spawn('/usr/bin/play', ['ready.mp3']);
+spawn('/usr/bin/play', ['sounds/ready.mp3']);
 
 

@@ -6,13 +6,15 @@ import re
 import sys
 import time
 import pyaudio
-from pprint import pprint
 
 from google.cloud import speech
 from google.cloud.speech import enums
 from google.cloud.speech import types
 from six.moves import queue
 
+# See http://g.co/cloud/speech/docs/languages
+# for a list of supported languages.
+language_code = 'en-UK'  # a BCP-47 language tag
 
 # Audio recording parameters
 RATE = 16000
@@ -26,6 +28,7 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "sttCredentials.json"
 
 def print_error(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
+    sys.stderr.flush()
 # ==============================================
 
 # ==============================================
@@ -77,6 +80,7 @@ class MicrophoneStream(object):
         return self
 
     def open(self):
+        print_error('opening audio stream');
         self._audio_stream = self._audio_interface.open(
             input_device_index=SINK_ID,
             format=pyaudio.paInt16,
@@ -93,6 +97,7 @@ class MicrophoneStream(object):
         self.closed = False
 
     def close(self):
+        print_error('closing audio stream');
         self._audio_stream.stop_stream()
         self._audio_stream.close()
         self.closed = True
@@ -145,19 +150,21 @@ def listen_print_loop(responses):
 
     """
 
-    startedSpeaking = False;
+    startedSpeaking = False
+    count=0
 
     for response in responses:
 
+        count = count + 1
         # print('got response');
         if not response.results:
             # print('empty');
-            # print(startedSpeaking);
+            print_error('End of utterance');
             if response.speech_event_type == enums.StreamingRecognizeResponse.SpeechEventType.END_OF_SINGLE_UTTERANCE:
                 # ignore this packet if we have seen partial responses
                 # the eventual answer will appear in a subsequent response with result.is_final==True
                 if startedSpeaking: continue
-                sys.stdout.write("NOTHING\n");
+                sys.stdout.write("<NOTHING>\n");
                 sys.stdout.flush();
                 break
         else:
@@ -167,10 +174,13 @@ def listen_print_loop(responses):
             # the first result being considered, since once it's `is_final`, it
             # moves on to considering the next utterance.
             result = response.results[0]
-            if not result.is_final: continue
+            if not result.is_final:
+                print_error('Interim result');
+                continue
 
             # print('final');
             if result.alternatives:
+                print_error('Final result');
 
                 # Display the transcription of the top alternative.
                 transcript = result.alternatives[0].transcript
@@ -181,11 +191,11 @@ def listen_print_loop(responses):
 
                 break
 
+    print_error('Finished response loop')
+    return count
 
-def main():
-    # See http://g.co/cloud/speech/docs/languages
-    # for a list of supported languages.
-    language_code = 'en-UK'  # a BCP-47 language tag
+def listen():
+    global language_code, RATE, enums, types, speech
 
     client = speech.SpeechClient()
     config = types.RecognitionConfig(
@@ -198,6 +208,11 @@ def main():
         single_utterance=True,
         interim_results=True)
 
+    numResponses = 1
+    atStartup = True
+
+    print_error('STARTED');
+
     with MicrophoneStream(RATE, CHUNK) as stream:
         while True:
             # Wait for a line of input (i.e. the wake word) before we start listening
@@ -206,14 +221,17 @@ def main():
                 line = sys.stdin.readline().rstrip()
                 elapsed = time.time()-start
                 # Ignore any buffered lines i.e. only stop looping when we had to wait for the new line to arrive
-                if elapsed<0.5:
+                # Except for at startup
+                if not atStartup and elapsed<0.2:
                     print_error('Ignoring buffered line')
                 else:
                     break
 
             # If the line of input we got was just "exit" then.... well.... exit!
             if line=='exit':
-                break
+                return False
+
+            atStartup=False
 
             stream.open()
             audio_generator = stream.generator()
@@ -223,8 +241,23 @@ def main():
             responses = client.streaming_recognize(streaming_config, requests)
 
             # Now, put the transcription responses to use.
-            listen_print_loop(responses)
+            numResponses = listen_print_loop(responses)
+            print_error('Got '+str(numResponses)+' responses from Google')
+
+            # Sometimes the Google TTS call fails
+            # if the last go failed to get any sort of response from Google then numResponses will be zero
+            # In this case just go around again immediately without waiting
+            if numResponses==0: return True;
+
             stream.close()
+            return
+
+def main():
+    global PY_AUDIO
+
+    listen()
+    print_error('Giving up')
+    PY_AUDIO.terminate()
 
 if __name__ == '__main__':
     main()

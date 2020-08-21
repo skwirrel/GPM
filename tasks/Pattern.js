@@ -142,7 +142,6 @@ function matchItem( state, pattern, substituteText, substituteIfEmpty, functions
 			before = bits[0];
 			str = str.substring( before.length );
 		}
-        console.log('xx'+pattern+','+before+','+str+'xx');
         let patternLength = pattern.length + before.length;
 		pattern = pattern.trim();
 		if (pattern==='') {
@@ -426,8 +425,8 @@ Pattern.prototype.match = function( testText ) {
     let partialMatches = [];
     for (let i=0;i<matches.length; i++) {
         let whichResultSet = matches[i].str=='' ? fullMatches : partialMatches;
-        # Reorder the match lists such that the longer matches come top
-        # If there is a draw on match length then look at the number of matches - more matches wins
+        // Reorder the match lists such that the longer matches come top
+        // If there is a draw on match length then look at the number of matches - more matches wins
         for (let j=0;j<=whichResultSet.length; j++) {
             if (
                 j==whichResultSet.length ||
@@ -440,7 +439,6 @@ Pattern.prototype.match = function( testText ) {
         }
     }
     if (!fullMatches.length) fullMatches=false;
-        console.log('----------',fullMatches,'-------------');
     return [fullMatches,partialMatches];
 }
 

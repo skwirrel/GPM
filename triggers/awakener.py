@@ -30,10 +30,11 @@ def noalsaerr():
 porcupine = None
 pa = None
 audio_stream = None
+keywords=["porcupine","americano"]
 
 try:
     porcupine = pvporcupine.create(
-        keywords=["porcupine","americano"],
+        keywords=keywords,
         sensitivities=[1,1])
 
     with noalsaerr():
@@ -48,6 +49,7 @@ try:
                 SINK_ID=i
 
     audio_stream = pa.open(
+                    input_device_index=SINK_ID,
                     rate=porcupine.sample_rate,
                     channels=1,
                     format=pyaudio.paInt16,
@@ -61,7 +63,7 @@ try:
         keyword_index = porcupine.process(pcm)
 
         if keyword_index >= 0:
-            sys.stdout.write("Hotword Detected\n");
+            sys.stdout.write(keywords[keyword_index]+"\n");
             sys.stdout.flush();
 
 finally:

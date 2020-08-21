@@ -1,2 +1,5 @@
 music.db
 speakerCache/*
+sttCredentials.json
+tasks/nullListener.php
+triggers/nullAwakener.php
