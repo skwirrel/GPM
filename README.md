@@ -14,8 +14,11 @@
 
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
+## Contents
+* [Introduction](#introduction)
+* [Installation](#installation)
 
-## Introduction
+## <a name="introduction"></a>Introduction
 I started writing GPM for several reasons
 1. To get back the features I know and love from Google Play Music which will disappear when this is discontinued and replaced by YouTube music.
 2. Google Assistant is great, but gradually small aspects of it have become annoying - especially so as there is no way for me, as a developer to get in and improve it.
@@ -35,10 +38,15 @@ The code is written in a variety of languages: PHP, Javascript (Node.js) and Pyt
 
 Most of what should be configuration options are currently hard coded values - you will see that fixing this is high up on the todo list.
 
+## <a name="installation"></a>Installation
+**TODO** Finish this section
+
 ## Core Components
 The system is built from the following basic building blocks
 
 ### manager.js
+**TODO** Finish this section
+
 ### Triggers
 Triggers are things which detect external (or internal) stimuli which trigger events. Examples of stimuli might be:
 * a sensor picking up a change in the external environment (e.g. a rise in temperature)
