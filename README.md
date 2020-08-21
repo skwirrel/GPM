@@ -1,7 +1,5 @@
 # Goggle Pray Muzak (GPM)
 
-## License
-
     Copyright (C) 2020 Ben Jefferson
 
     This program is free software: you can redistribute it and/or modify
