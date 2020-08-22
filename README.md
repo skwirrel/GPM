@@ -16,7 +16,10 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ## Contents
 * [Introduction](#introduction)
+* [Design Principles](#designPrinciples)
+* [Status](#status)
 * [Installation](#installation)
+* [Core Components](#coreComponents)
 
 ## <a name="introduction"></a>Introduction
 I started writing GPM for several reasons
@@ -26,12 +29,12 @@ I started writing GPM for several reasons
 
 So I looked around and found that there were open source projects to deliver most of the key components. I have simply added the glue to bring these all together. 
 
-## Design Principles
+## <a name="designPrinciples"></a>Design Principles
 My aim is to build GPM as a modular framework for home automation and voice assistant projects which will be:
 1. Extensible: a pluggable architecture allowing new features to be added cleanly and easily in
 2. Modular: allowing elements to be swapped in and out. For instance, right now GPM uses Google Cloud solutions for the speech-to-text and text-to-speech elements. I hope that in time new modules will be added that can do both these tasks locally rather than relying on a paid external system (e.g. Using Mozilla Deep Speech)
 
-## Status
+## <a name="status"></a>Status
 This code is very much a work in progress. It works for me, but your millage may vary. It is currently highly tailored to the hardware I am using (Raspberry Pi 4 & Jabra 710 Speakerphone). The code varies in quality as I gradually transform it from early proof-of-concept sketches to more stable and efficient code.
 
 The code is written in a variety of languages: PHP, Javascript (Node.js) and Python. My intention is to replace any PHP with Javascript in the longer term.
@@ -39,9 +42,72 @@ The code is written in a variety of languages: PHP, Javascript (Node.js) and Pyt
 Most of what should be configuration options are currently hard coded values - you will see that fixing this is high up on the todo list.
 
 ## <a name="installation"></a>Installation
+N.B. As noted in the 'Status' section above the code and this process is only currently tested on a Raspberry Pi 4 with a Jabra 710 USB speakerphone connected.
+
+These notes assume that you will be using a 'headless' Raspberriy Pi 4 i.e. without a monitor attached. Thus everything will be done at the command line via an SSH connection
+
+These notes are based on a new Raspbian 10 installation
+
+1. [Enable remote access to your pi](https://www.raspberrypi.org/documentation/remote-access/ssh/)
+2. Find the IP address of your Pi. You can do this using the methods described  [here](https://www.raspberrypi.org/documentation/remote-access/ssh/) or by using the script [here](https://gist.github.com/skwirrel/5e2980dc2e43814939753486dda36ff4)
+3. Connect to your Pi using the default username (pi) and password (raspberry)
+4. Change the password on your Pi by running (you might also like to [setup passwordless access](https://www.raspberrypi.org/documentation/remote-access/ssh/passwordless.md) at this point)
+```
+passwd
+```
+ 5. Make sure the software on your Pi is up to date
+```
+sudo apt update
+sudo apt full-upgrade
+```
+5.  Install various software packages
+```
+sudo apt-get install -f pulseaudio pulseaudio-utils nano git sox libsox-fmt-all
+```
+6.  Set some pulseaudio settings by editting /etc/pulse/system.pa
+```
+sudo nano /etc/pulse/system.pa
+```
+7. Make sure the following lines are present and not commented out:
+```
+load-module module-stream-restore restore_device=false
+load-module module-native-protocol-tcp auth-ip-acl=127.0.0.1
+```
+??? At this point I think a reboot may be required for pulseaudio to start
+
+### Installing Node.js and npm
+```
+sudo apt-get install node npm
+```
+get npm to update itself
+```
+sudo npm install npm@latest -g
+```
+### Google Cloud - Creating a "Service Account"
+Go to [this page](https://cloud.google.com/iam/docs/creating-managing-service-accounts#iam-service-accounts-create-console) and look at the "## Creating a service account" section
+
+### Google Cloud - Speech to text
+You will need to set up a Google Cloud Compute account for this if you don't already have one
+You need to get a cloud credentials file for your account. 
+
+### Text To Speech
+
+### Mounting a Windows Share
+If you have music stored on a network attached storage device, this will typically be made available as a CIFS share.
+
+Install the CIFS tools to enable connecting to a Windows shared file server. This isn't neccessary if your audio is local (e.g. a USB disk plugged directly into the Raspberry Pi)
+```
+sudo apt install samba samba-common-bin smbclient cifs-utils
+```
+??? how to auto-mount CIFS share?
+These are the options if you need to mount a guest share with no password. N.B. If you NAS is old like mine you might need to add "vers=1.0" or something similar to force an older protocol version.
+```
+sudo mount.cifs //172.16.0.13/Media/ ~/mole -o username=guest,password=""
+```
+
 **TODO** Finish this section
 
-## Core Components
+## <a name="coreComponents"></a>Core Components
 The system is built from the following basic building blocks
 
 ### manager.js
