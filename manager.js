@@ -38,8 +38,13 @@ Manager.prototype.play = function( file, callback  ) {
 }
 
 
-Manager.prototype.enqueue = function( task, state ) {
-	this.queue.push( [ task, state ] );
+Manager.prototype.runTask = function( task, ...args ) {
+    if (typeof(tasks[task])=='undefined') return false;
+    tasks[task].run.apply(tasks[task], args);
+}
+
+Manager.prototype.enqueueTask = function( ...args ) {
+	this.queue.push( args );
 	if (!this.busy) this.processQueue();
 }
 
@@ -47,8 +52,8 @@ Manager.prototype.processQueue = function( justFinishedPreviousJob ) {
 	if (this.busy) return false;
 	if (!this.queue.length) return false;
 	
-	let task, state;
-	[ task, state ] = this.queue.shift();
+	let taskArguments = this.queue.shift();
+    let task = taskArguments.shift();
 	
 	if (typeof(tasks[task])=='undefined') return false;
 	this.busy++;
@@ -60,7 +65,7 @@ Manager.prototype.processQueue = function( justFinishedPreviousJob ) {
 	} else {
 		this.running = task;
         // if one job is running straight after another add a slight pause inbetween
-        setTimeout(function(){ tasks[task].run( state ); },justFinishedPreviousJob?500:0);
+        setTimeout(function(){ tasks[task].run.apply( tasks[task],taskArguments ); },justFinishedPreviousJob?500:0);
 	}
 }
 

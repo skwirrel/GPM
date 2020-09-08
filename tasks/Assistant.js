@@ -52,8 +52,8 @@ const commands = [
     [ 'playMusic'     , '$please $canYou play [me] [the [track|song]] (song:<theRest>)'],
     [ 'playMusic'     , '$please $canYou play [me] (something:<theRest>)'],
     [ 'howAreYou'     , 'how [are] you [feeling] [today|now|at the moment|]'],
-    [ 'rollDice'      , '$please $canYou [roll [me]|romy] (number:[[1:a|one|1]|[2:2|two|a pair of]|[3:3|three]|[4:4|four]]) dice [for me]'],
-    [ 'tossCoin'      , '$please $canYou toss [me] a coin [for me]'],
+    [ 'rollDice'      , '$please $canYou [[roll|throw|toss] [me]|romy] (number:[[1:a|one|1]|[2:2|two|a pair of]|[3:3|three]|[4:4|four]]) [dice|die] [for me]'],
+    [ 'tossCoin'      , '$please $canYou [flip|toss] [me] a coin [for me]'],
     [ 'spell'         , '$please $canYou [tell me] how [does one|should I|[do] you|to] spell (word:<theRest>)'],
 ];
 
@@ -201,7 +201,7 @@ Assistant.prototype.done = function() {
     });
 }
 
-const stopWords = [ 'thats all','thats all thanks','stop','ok','ok thanks','nothing','forget it','thanks' ]
+const stopWords = [ 'timeout','nothing','cancel','cancel thanks','thats all','thats all thanks','stop','ok','ok thanks','forget it','thanks' ]
 Assistant.prototype.heard = function( utterance ) {
     var self = this;
     this.listening = false;
@@ -222,7 +222,6 @@ Assistant.prototype.heard = function( utterance ) {
     
     let result = multiPattern.match( utterance );
     
-    //console.log(result);
     // Handle recognized stuff first
     if ( typeof( commandHandlers[result.matchedCommand] ) == 'function' ) {
 		// Call the handler passing the callback for them to call when they are finished
@@ -231,7 +230,7 @@ Assistant.prototype.heard = function( utterance ) {
 		});
 		return true;
 	}
-    
+
 	// Didn't recognize the utterance - or no handler defined
     this.manager.say('Sorry. I don\'t understand.',true,function(){ self.listen(); });
     return false;    

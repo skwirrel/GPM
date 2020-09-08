@@ -7,11 +7,15 @@ $Directory = new RecursiveDirectoryIterator($baseDir);
 $Iterator = new RecursiveIteratorIterator($Directory);
 $Regex = new RegexIterator($Iterator, '/^.+\.mp3$/i', RecursiveRegexIterator::GET_MATCH);
 
-$c=0;
+echo "Counting music files... this may take a few moments...\n";
+$numFiles = 0;
+foreach( $Regex as $file ) {
+    $numFiles++;
+}
+
 function output( $severity, $message ) {
     echo "$message\n";
 }
-
 
 if (!file_exists($dbFile)) output(2,"Creating new SQLite database file: $dbFile");
 $db = new SQLite3($dbFile);
@@ -27,8 +31,10 @@ if (!$tableExists) {
     $db->exec("CREATE INDEX index_artist ON music(artist,album,title)");
 }
 
-$insertQuery = $db->prepare("INSERT OR REPLACE INTO music(file,title,album,artist) VALUES( :file, :title, :album, :artist )");
+echo "Found ".$numFiles." files\n";
 
+$insertQuery = $db->prepare("INSERT OR REPLACE INTO music(file,title,album,artist) VALUES( :file, :title, :album, :artist )");
+$c = 0;
 foreach( $Regex as $file ) {
     $file = $file[0]; 
 
@@ -43,6 +49,10 @@ foreach( $Regex as $file ) {
     if (count($tags)!=3) {
         output(-1,"Couldn't find all ID3 data (only found: ".implode(',',array_keys($tags)).") in file: ".$file );
     } else {
+        foreach( $tags as $tag=>$value ) {
+            // normalize the string
+            $tag = preg_replace('/[^a-z0-9 ]+/','',strtolower(trim($value)));
+        }
         $tags['file'] = $file;
         $insertQuery->reset();
         foreach( $tags as $tag=>$value ) {
@@ -52,7 +62,8 @@ foreach( $Regex as $file ) {
     }
         
     //if ($c++>1) break;
-    printf("%06d:%s\n",++$c,$file);
+    $c++;
+    printf("%03d%%:%06d:%s\n",$c/($numFiles/100),$c,$file);
 }
 
 $res = $db->query('SELECT * FROM music');

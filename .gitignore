@@ -3,3 +3,6 @@ speakerCache/*
 sttCredentials.json
 tasks/nullListener.php
 triggers/nullAwakener.php
+musly
+collection.musly
+node_modules

@@ -1,0 +1,7 @@
+{
+  "name": "Goggle-Pray-Muzak",
+  "version": "0.1",
+  "dependencies": {
+    "fuzzball": "^1.3.0"
+  }
+}
