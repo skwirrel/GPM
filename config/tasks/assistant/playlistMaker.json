@@ -1,0 +1,25 @@
+{
+    // Location for the Beets music database file
+    // This file must exist
+    //     dbFile                  : '<<baseDirectory>>/musiclibrary.db',
+    
+    // Directory where cached Audioscrobbler data will be stored
+    // Audioscrobbler is used to find similar tracks when building automatic playlists
+    // This directory will be created if it doesn't exist
+    //     cacheDir                : '<<baseDirectory>>/audioscrobblerCache',
+    
+    // How long to keep cached audioscrobbler data for (in days)
+    //     maxCacheAge             : 100,
+    
+    // When building automatic playlists stop the playlist getting swamped
+    // by one particular artist by capping the maximum number of tracks added per artist
+    //     maxExtraTracksPerArtist : 10,
+    
+    // When building automatic playlists add in tracks recorded in the x years either
+    // side of when the initially requested track/album was recorded
+    // When multiple tracks with different recording years are requested then the
+    // average recording year is used as the reference point.
+    // set this to -1 to disable this feature (i.e. don't add extra tracks based on
+    // recording year)
+    //     yearsEitherSide         : 5, 
+}

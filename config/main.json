@@ -1,0 +1,54 @@
+/*
+ * GPM configuration files are written in hjson format. See: https://hjson.org/
+ * Basically... it JSON, but with comments and a bit less fussy
+ * 
+ * GPM extends hjson by adding support for interpolation of values (and keys) thus:
+ * If a config parameter "homeDir" is set to "/home/fred", then 
+ * a config value encountered later of "<<homeDir>>/stuff" will evaluate to "/home/fred/stuff"
+ * The interpolation supports properties and array indices e.g. if this config is defined...
+ * 
+ *     one: {
+ *         two: {
+ *            three: [ 'aaa', 'bbb', 'ccc' ]
+ *         }
+ *     }
+ *
+ * ...then "some_<<one.two.three[1]>>_stuff" will evaluate to "some_bbb_stuff"
+ * 
+ * Interpolation is not confined just to values - it can also be used in key names
+ * 
+ * GPM also adds support for replacing "~" with the user's home directory, but ONLY WHEN...
+ * 1.The "~" is the first character in the configuration value e.g. "~/GPM"
+ * 2.The configuration key name ends "Dir" or "Directory" (case insensitive
+ * 
+ * GPM loads in this main configuration file (config/main.json) followed by the
+ * configuration file for whatever script is running. e.g. the tasks/assistant/makePlaylist.js 
+ * script will load in config/main.json followed by config/tasks/assistant/makePlaylist.json.
+ * 
+ * Values for the same key in the configuration for the running script will override
+ * values for that key in main.json.
+ * 
+ * Nested structures are merged. Thus if main.js defines this...
+ *     one: {
+ *         two: {
+ *            three: [ 'aaa', 'bbb', 'ccc' ]
+ *         }
+ *     }
+ * ...but then the script config defines this...
+ *     one: {
+ *         two: {
+ *            four: [ 'xxx', 'yyy', 'zzz' ]
+ *         }
+ *     }
+ * ... then the net result will be...
+ *     one: {
+ *         two: {
+ *            three: [ 'aaa', 'bbb', 'ccc' ],
+ *            four: [ 'xxx', 'yyy', 'zzz' ]
+ *         }
+ *     }
+ */
+
+{
+    "baseDirectory":"~/.GPM",
+}
