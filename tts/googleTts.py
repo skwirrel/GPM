@@ -4,12 +4,27 @@ import hashlib
 import os.path
 import pathlib
 import subprocess
+import json
 from google.cloud import texttospeech
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "sttCredentials.json"
+# Get node to compile the configuration for us and the parse the resulting JSON
+config = json.loads(subprocess.check_output(['node','compileConfig.js',__file__]));
 
-cacheDir = 'speakerCache'
-maxCacheSize = 1048576 * 10 # 10 MB cached text to speech files
+if "googleCloudCredentials" not in config:
+    sys.stderr.write("Couldn't find location of Google Cloud Credentials file in configuration. Make sure configuration defines \"googleCloudCredentials\"" )
+    quit(1)
+
+if "ttsCacheDirectory" not in config:
+    sys.stderr.write("Couldn't find location of Google Cloud Credentials file in configuration. Make sure configuration defines \"ttsCacheDirectory\"" )
+    quit(1)
+    
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = config["googleCloudCredentials"]
+cacheDir = config["ttsCacheDirectory"]
+
+if "ttsCacheSize" in config:
+    maxCacheSize = int(config["ttsCacheSize"])
+else:
+    maxCacheSize = 1048576 * 10 # 10 MB cached text to speech files
 
 def tidyCache( newFile, alreadyInCache ):
     global maxCacheSize
@@ -27,6 +42,16 @@ def tidyCache( newFile, alreadyInCache ):
         tidyCache.cacheSize -= os.path.getsize(file)
         os.remove(os.path.abspath(file))
 
+# Create the cache directory if it doesn't already exist
+if not os.path.exists(cacheDir):
+    os.mkdir(cacheDir)
+    if not os.path.exists(cacheDir):
+        sys.stderr.write("Cache directory ( "+cacheDir+" ) doesn't exist and I couldn't create it for you for some reason." )
+        quit(1)
+elif os.path.isfile(cacheDir):
+    sys.stderr.write("The path specified for ttsCacheDirectory ( "+cacheDir+" ) points to a file, not a directory." )
+    quit(1)
+    
 # Initialize the list of cached files
 tidyCache.cachedFiles = [ str(file) for file in sorted(pathlib.Path(cacheDir).iterdir(), key=os.path.getmtime) ]
 
@@ -62,6 +87,7 @@ def getSpeech( line, cacheFile=None ):
         fh.close();
 
 # Instantiate the Google TTS client, voice and encoding
+
 getSpeech.ttsClient = texttospeech.TextToSpeechClient()
 getSpeech.voice = texttospeech.VoiceSelectionParams(
         language_code='en-UK',

@@ -21,23 +21,27 @@
  * 1.The "~" is the first character in the configuration value e.g. "~/GPM"
  * 2.The configuration key name ends "Dir" or "Directory" (case insensitive
  * 
- * GPM loads in this main configuration file (config/main.json) followed by the
- * configuration file for whatever script is running. e.g. the tasks/assistant/makePlaylist.js 
- * script will load in config/main.json followed by config/tasks/assistant/makePlaylist.json.
+ * GPM reads config from 4 places in the following order:
+ * 1. Internal built in default values - most parameters will have a built in default.
+ * 2. <GPM base directory>/config/main.json
+ * 3. <GPM base directory>/config/<script path>/<script name minus ".js">.json
+ *      e.g. the script tasks/assistant/playlistMaker.js will load config from "<GPM base directory>/config/tasks/assistant/playlistMaker.json"
+ * 4. <user's home directory>/.GPM/config.json
  * 
- * Values for the same key in the configuration for the running script will override
- * values for that key in main.json.
+ * Any key that appears in a latter file will override the same key from a former file.
  * 
  * Nested structures are merged. Thus if main.js defines this...
  *     one: {
  *         two: {
- *            three: [ 'aaa', 'bbb', 'ccc' ]
+ *            three: [ 'aaa', 'bbb', 'ccc' ],
+ *            five: '999'
  *         }
  *     }
  * ...but then the script config defines this...
  *     one: {
  *         two: {
  *            four: [ 'xxx', 'yyy', 'zzz' ]
+ *            five: '555'
  *         }
  *     }
  * ... then the net result will be...
@@ -45,10 +49,20 @@
  *         two: {
  *            three: [ 'aaa', 'bbb', 'ccc' ],
  *            four: [ 'xxx', 'yyy', 'zzz' ]
+ *            five: '555'
  *         }
  *     }
  */
 
 {
-    "baseDirectory":"~/.GPM",
+    "baseDirectory"             : "~/.GPM",
+    
+    // Using Google's speech to text, or text to speech requires having a credentials file
+    "googleCloudCredentials"    : "<<baseDirectory>>/gcloudCredentials.json"
+    
+    // Specify which tts engine to use - at the moment there is only one!
+    // This takes the form of an array containing the command to run followed by any arguments
+    "ttsEngine"                 : ['python3','tts/googleTts.py'],
+    "ttsCacheDirectory"         : "<<baseDirectory>>/ttsCache",
+    "ttsCacheSize"              : 10485760, # 10MB of cached tts audio
 }

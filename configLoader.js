@@ -3,25 +3,6 @@ const path = require('path');
 const homedir = require('os').homedir();
 const hjson = require('hjson');
 
-let filename = require.main.filename;
-
-var configLocation;
-var mainConfigLocation;
-
-let dir = filename;
-let subdir = '';
-while (dir.length>1) {
-    subdir = path.basename(dir)+'/'+subdir;
-    dir = path.dirname(dir);
-    let lookingFor = dir+'/config';
-    if (fs.existsSync(lookingFor) && fs.lstatSync(lookingFor).isDirectory()) {
-        mainConfigLocation = lookingFor+'/main.json';
-        configLocation = lookingFor+'/'+subdir;
-        configLocation = configLocation.replace(/\.js\/$/,'.json');
-        break;
-    }
-}
-
 function mergeDeep(target, ...sources) {
   if (!sources.length) return target;
   const source = sources.shift();
@@ -40,14 +21,11 @@ function mergeDeep(target, ...sources) {
   return mergeDeep(target, ...sources);
 }
 
-var config = mergeDeep(
-    fs.existsSync(mainConfigLocation) ? hjson.parse(fs.readFileSync(mainConfigLocation, 'utf-8')) : {},
-    fs.existsSync(configLocation) ? hjson.parse(fs.readFileSync(configLocation, 'utf-8')) : {},
-);
-
 function isObject(item) {
   return (item && typeof item === 'object' && !Array.isArray(item));
 }
+
+var config;
 
 function configSubstitution( notUsed, key ) {
     let data = config;
@@ -73,18 +51,51 @@ function interpolateConfig(config) {
             interpolateConfig( config[key] );
         } else {
             config[newKey] = config[key].toString().replace(configInterpolationRegex,configSubstitution);
+            // Support for ~ => home directory in any parameters that end "Directory" or "Dir"
             if (newKey.match(isDiretoryConfiguration) && config[newKey].substring(0,1)=='~') {
                 config[newKey] = homedir+config[newKey].substring(1);
             }
         }
         if (newKey !== key) delete config[key];
-        // Support for ~ => home directory in any parameters that end "Directory" or "Dir"
     }
 }
 
-interpolateConfig(config);
+module.exports = function(defaults,location){
 
-module.exports = function(defaults){
-    interpolateConfig(defaults);
-    return mergeDeep(defaults,config);
+    let configLocation;
+    let mainConfigLocation;
+    let personalConfigLocation;
+    
+    personalConfigLocation = homedir + '/.GPM/config.json';
+    
+    let dir = location || require.main.filename;
+    let subdir = '';
+
+    // Find the locations of the relevant config files
+    while (dir.length>1) {
+        subdir = path.basename(dir)+'/'+subdir;
+        dir = path.dirname(dir);
+        let lookingFor = dir+'/config';
+        if (fs.existsSync(lookingFor) && fs.lstatSync(lookingFor).isDirectory()) {
+            mainConfigLocation = lookingFor+'/main.json';
+            configLocation = lookingFor+'/'+subdir;
+            configLocation = configLocation.replace(/\.(js|py)\/$/,'.json');
+            break;
+        }
+    }
+
+    config = mergeDeep(
+        defaults,
+        fs.existsSync(mainConfigLocation) ? hjson.parse(fs.readFileSync(mainConfigLocation, 'utf-8')) : {},
+        fs.existsSync(configLocation) ? hjson.parse(fs.readFileSync(configLocation, 'utf-8')) : {},
+        fs.existsSync(personalConfigLocation) ? hjson.parse(fs.readFileSync(personalConfigLocation, 'utf-8')) : {},
+    );
+
+    // Add lt and gt to the config so that these can be used if we ever need to actually have << or >> in config keys/values
+    // With these in place we can use <<lt>> for "<<" or <<gt>> for ">>"
+    config.lt = '<<';
+    config.gt = '<<';
+    interpolateConfig(config);
+    
+    return config;
 }

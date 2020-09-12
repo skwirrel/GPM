@@ -23,7 +23,8 @@ CHUNK = int(RATE / 10)  # 100ms
 SINK_NAME = 'pulse'
 TIMEOUT = 5
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "sttCredentials.json"
+gcloudCredentials = "~/.GPM/gcloudCredentials.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.expanduser(gcloudCredentials);
 
 # ==============================================
 # Support printing to STDERR

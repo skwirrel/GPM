@@ -1,0 +1,9 @@
+# You can use the following command to install all the packages listed in this file:
+# grep -vE '^#' required-apt-packeges | xargs sudo apt install -y
+python3
+python3-pip
+python3-all-dev
+python3-pyaudio
+portaudio19-dev
+libsndfile1
+libasound2-dev

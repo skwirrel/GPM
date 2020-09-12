@@ -2,12 +2,18 @@
 // Pattern Object
 // ==================================================================================
 
-require('./Class.js');
-
 const builtIn = {
 	textMatch : {
 		theRest : function(input) {
 			return(['']);
+		},
+		stuff : function(input,variant='words') {
+            let results=[];
+            do {
+                input = input.replace(variant=='words' ? /^\S+\s*/ : /^./,'');
+                results.push(input);
+            } while(input.length);
+            return results;
 		}
 	}
 };
@@ -100,7 +106,7 @@ const handlers = {
 	'<'	: {
 		regexp	: /^(.*?)(>)/,
 		closer	: '>',
-		processText	: function( substr ) { return [substr] }
+		processText	: function( substr ) { return substr.split(':') }
 	},
 	
 	'{'	: {
@@ -220,8 +226,7 @@ function _match( state, pattern, functions ) {
 				functions.textMatch[functionName] :
 				builtIn.textMatch[functionName]
 			;
-			
-			let textResults = theFunction(state.str.trim());
+			let textResults = theFunction(state.str.trim(),...pattern);
 			if (!textResults.length) return false;
 			for( let i=0; i<textResults.length; i++) {
 				let substituteText = ''
@@ -449,13 +454,13 @@ const MultiPattern = function( options ) {
     let command,i;
     for( i=0; i<commands.length; i++ ) {
         this.commands[i] = [
-            commands[i][0],
             new Pattern({
-                pattern:            commands[i][1],
+                pattern:            commands[i][0],
                 phrasebook:         options.phrasebook,
                 matchFunctions:     options.matchFunctions,
                 processFunctions:   options.processFunctions,
-            })
+            }),
+            commands[i][1]
         ];
     }
 }
@@ -463,9 +468,9 @@ const MultiPattern = function( options ) {
 MultiPattern.prototype.match = function( input ) {
     let command,i;
     for( i=0; i<this.commands.length; i++ ) {
-        result = this.commands[i][1].match(input);
+        result = this.commands[i][0].match(input);
         if (result[0]) {
-            result[0][0].matchedCommand=this.commands[i][0];
+            result[0][0].handler=this.commands[i][1];
             return(result[0][0]);
         }
     }

@@ -1,5 +1,5 @@
 music.db
-speakerCache/*
+ttsCache/*
 sttCredentials.json
 tasks/nullListener.php
 triggers/nullAwakener.php
