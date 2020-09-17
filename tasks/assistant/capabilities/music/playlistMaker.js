@@ -1,13 +1,13 @@
-const config = require('../../configLoader.js')({
-    dbFile                  : '<<baseDirectory>>/musiclibrary.db',
-    cacheDir                : '<<baseDirectory>>/audioscrobblerCache',
-    maxCacheAge             : 100,
-    maxExtraTracksPerArtist : 10,
-    yearsEitherSide         : 5,
+const config = require('../../../../configLoader.js')({
+    musicLibraryDbFile                  : '<<baseDirectory>>/musiclibrary.db',
+    audioscrobblerCacheDir              : '<<baseDirectory>>/audioscrobblerCache',
+    audioscrobblerMaxCacheAge           : 100,
+    playlistMaxExtraTracksPerArtist     : 10,
+    playlistYearsEitherSide             : 5,
 });
 
-const yearsEitherSide = parseInt(config.yearsEitherSide);
-const maxExtraTracksPerArtist = parseInt(config.maxExtraTracksPerArtist);
+const yearsEitherSide = parseInt(config.playlistYearsEitherSide);
+const maxExtraTracksPerArtist = parseInt(config.playlistMaxExtraTracksPerArtist);
 
 const fs = require('fs');
 const http = require('http');
@@ -25,7 +25,7 @@ const fuzzLookupOptions = {
 };
 
 // Create the cache directory if it doesn't exist
-const cacheDir = config.cacheDir;
+const cacheDir = config.audioscrobblerCacheDir;
 if (!fs.existsSync(cacheDir) || !fs.statSync(cacheDir).isDirectory()) {
     fs.mkdirSync(cacheDir, { recursive: true });
     if (!fs.existsSync(cacheDir) || !fs.statSync(cacheDir).isDirectory()) {
@@ -35,8 +35,8 @@ if (!fs.existsSync(cacheDir) || !fs.statSync(cacheDir).isDirectory()) {
 }
 
 // Check the required things exist
-if (!fs.existsSync(config.dbFile) || !fs.statSync(config.dbFile).isFile()) {
-    console.error('Couldn\'t find Beets music database: '+config.dbFile);
+if (!fs.existsSync(config.musicLibraryDbFile) || !fs.statSync(config.musicLibraryDbFile).isFile()) {
+    console.error('Couldn\'t find Beets music database: '+config.musicLibraryDbFile);
     process.exit();
 }
     
@@ -117,7 +117,7 @@ function downloadPage(url,callback) {
     
     const cacheFile = cacheDir + '/' + md5(url);
 
-    if ( (new Date().getTime() - fileGetMtime(cacheFile)) < config.maxCacheAge * 86400 * 1000 ) {
+    if ( (new Date().getTime() - fileGetMtime(cacheFile)) < config.audioscrobblerMaxCacheAge * 86400 * 1000 ) {
         // Use the chached version
         let contents = fileGetContents(cacheFile);
         let notUsed;
@@ -177,7 +177,7 @@ function getSimilar(mbid,callback) {
 }
 const getSimilarPromise = util.promisify(getSimilar);
 
-const db = require('better-sqlite3')(config.dbFile);
+const db = require('better-sqlite3')(config.musicLibraryDbFile);
 const lookups = {
     artist: getRows('select distinct mb_artistid, artist from items where genre<>\'Books & Spoken\'','artist'),
     track: getRows('select distinct mb_trackid, title from items where genre<>\'Books & Spoken\'','title'),
@@ -211,18 +211,18 @@ function makePlaylist( type, searchTerm, callback ) {
         let tracks;
         message = 'Playing '+type+': '+result[type];
         if (type=='artist') {
-            tracks = getRows('SELECT id, path, mb_artistid, mb_trackid FROM items WHERE artist=? ORDER BY RANDOM()',false,result.artist);
+            tracks = getRows('SELECT id, path, album, artist, mb_artistid, mb_trackid FROM items WHERE artist=? ORDER BY RANDOM()',false,result.artist);
             emptyMessage = 'Couldn\'t find any music by: '+searchTerm;
         } else if (type == 'track') {
-            tracks = getRows('SELECT id, path, mb_artistid, mb_trackid FROM items WHERE title=?',false,result.title);
+            tracks = getRows('SELECT id, path, album, artist, mb_artistid, mb_trackid FROM items WHERE title=?',false,result.title);
             emptyMessage = 'Couldn\'t find a track called "'+searchTerm+'"';
         } else if (type == 'album') {
-            tracks = getRows('SELECT id, path, mb_artistid, mb_trackid FROM items WHERE album=? ORDER BY disc,track',false,result.album);
+            tracks = getRows('SELECT id, path, album, artist, mb_artistid, mb_trackid FROM items WHERE album=? ORDER BY disc,track',false,result.album);
             emptyMessage = 'Couldn\'t find the album: '+searchTerm;
         } else if (type == 'random') {
             // pick an artist at random
             message = 'Playing some music';
-            tracks = getRows('SELECT id, path, mb_artistid, mb_trackid FROM items WHERE artist=? ORDER BY RANDOM() LIMIT 1',false,result.artist);
+            tracks = getRows('SELECT id, path, album, artist, mb_artistid, mb_trackid FROM items WHERE artist=? ORDER BY RANDOM() LIMIT 1',false,result.artist);
             emptyMessage = 'Couldn\'t find any music at all';
         }
         
@@ -245,7 +245,7 @@ function makePlaylist( type, searchTerm, callback ) {
             var averageYear = Math.round(result[0].average);
             if (averageYear>0) {
                 console.log('recording year is:'+averageYear);
-                decadeTracks = getRows('SELECT items.id,items.path,items.artist FROM item_attributes INNER JOIN items ON items.id=item_attributes.entity_id WHERE item_attributes.key=\'recording_year\' AND (item_attributes.value >=? AND item_attributes.value <=?) AND genre<>\'Books & Spoken\' ORDER BY ABS(item_attributes.value-?),RANDOM()',false,averageYear-yearsEitherSide,averageYear+yearsEitherSide,averageYear);
+                decadeTracks = getRows('SELECT items.id,items.path,items.artist, items.album, items.title FROM item_attributes INNER JOIN items ON items.id=item_attributes.entity_id WHERE item_attributes.key=\'recording_year\' AND (item_attributes.value >=? AND item_attributes.value <=?) AND genre<>\'Books & Spoken\' ORDER BY ABS(item_attributes.value-?),RANDOM()',false,averageYear-yearsEitherSide,averageYear+yearsEitherSide,averageYear);
             }
         }
     }
@@ -341,16 +341,20 @@ function processQueue() {
         if (type=='END') process.exit();
         makePlaylist( type, searchTerm, function(message,requestedTracks,extraTracks){
             process.stdout.write(message+"\n");
+            let output = [];
             if (requestedTracks) {
                 for( id in requestedTracks) {
-                    process.stdout.write( id+':'+requestedTracks[id].path+'\n' );
+                    requestedTracks[id].path = requestedTracks[id].path.toString();
+                    output.push(requestedTracks[id]);
                 }
             }
             if (extraTracks) {
                 for( id in extraTracks) {
-                    process.stdout.write( extraTracks[id].id+':'+extraTracks[id].path+'\n' );
+                    extraTracks[id].path = extraTracks[id].path.toString();
+                    output.push(extraTracks[id])
                 }
             }
+            process.stdout.write(JSON.stringify(output)+'\n');
             process.stdout.write('END\n');
             
             busy = false;

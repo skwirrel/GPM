@@ -40,9 +40,18 @@ function configSubstitution( notUsed, key ) {
 }
 
 let configInterpolationRegex = /<<(.*?)>>/g;
-let isDiretoryConfiguration = /(dir|directory)$/i;
+let isDiretoryConfiguration = /(dir|directory|file|filename)$/i;
 
 function interpolateConfig(config) {
+    // First go through and resolve home directories
+    for (let key in config) {
+        // Support for ~ => home directory in any parameters that end "Directory", "Dir", "File" or "filename"
+        if (key.match(isDiretoryConfiguration) && config[key].substring(0,1)=='~') {
+            config[key] = homedir+config[key].substring(1);
+        }
+    }
+    
+    // Now substitute any parameter references
     for (let key in config) {
         key = key.toString();
         let newKey = key.replace(configInterpolationRegex,configSubstitution);
@@ -51,10 +60,6 @@ function interpolateConfig(config) {
             interpolateConfig( config[key] );
         } else {
             config[newKey] = config[key].toString().replace(configInterpolationRegex,configSubstitution);
-            // Support for ~ => home directory in any parameters that end "Directory" or "Dir"
-            if (newKey.match(isDiretoryConfiguration) && config[newKey].substring(0,1)=='~') {
-                config[newKey] = homedir+config[newKey].substring(1);
-            }
         }
         if (newKey !== key) delete config[key];
     }
@@ -95,6 +100,7 @@ module.exports = function(defaults,location){
     // With these in place we can use <<lt>> for "<<" or <<gt>> for ">>"
     config.lt = '<<';
     config.gt = '<<';
+
     interpolateConfig(config);
     
     return config;

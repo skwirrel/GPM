@@ -1,8 +1,8 @@
 let capabilities = [
     {
         context         : 'main',
-        incantation     : '$please $canYou [tell me] what[s] [time [it is|is it]|[is ]the time] [now] $please',
-        handler         : function( matchDetails, manager, callback ) {
+        incantation     : '[tell me] what[s] [time [it is|is it]|[is ]the time] [now]',
+        handler         : function( matchDetails, assistant, callback ) {
             const date = new Date();
             let hours = date.getHours();
             let minutes = date.getMinutes();
@@ -20,12 +20,16 @@ let capabilities = [
             else time = hours+' '+minutes;
 
             let timeIs = Math.random()<0.5 ? "It's":'The time is';
-            manager.say(timeIs+' '+time,true,callback);		
+            
+            return {
+                say: timeIs+' '+time,
+                cachable: false
+            };
         },
     },{
         context         : 'main',
-        incantation     : '$please $canYou [tell me] what[s| is] [todays|the] date [today] $please',
-        handler         : function( matchDetails, manager, callback ) {
+        incantation     : '[tell me] what[s| is] [todays|the] date [today]',
+        handler         : function( matchDetails, assistant, callback ) {
             const d = new Date();
             const weekday = new Intl.DateTimeFormat('en', { weekday: 'long' }).format(d);
             const year = new Intl.DateTimeFormat('en', { year: 'numeric' }).format(d);
@@ -34,7 +38,10 @@ let capabilities = [
             // Add the ordinal
             day += (day > 0 ? ['th', 'st', 'nd', 'rd'][(day > 3 && day < 21) || day % 10 > 3 ? 0 : day % 10] : '');
 
-            manager.say('Today is '+weekday+' the '+day+' of '+month+' '+year,true,callback);		
+            return {
+                say: 'Today is '+weekday+' the '+day+' of '+month+' '+year,
+                cachable: false
+            };
         },
     }
 ];

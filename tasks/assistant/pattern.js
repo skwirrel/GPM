@@ -14,6 +14,16 @@ const builtIn = {
                 results.push(input);
             } while(input.length);
             return results;
+		},
+		number : function(input,min=null,max=null) {
+            input = input.replace(/^(\.\d+)/,'0$1');
+            let matched;
+            if (matched = input.match(/^-?\d+(\.\d+)?/)) {
+                let value = matched[1] ? parseFloat(matched[0]) :  parseInt(matched[0]);
+                if ((min!==null && min.length && value<parseFloat(min)) || (max!==null && max.length && value>parseFloat(max))) return[];
+                else return[input.substring(matched[0].length)];
+            }
+            return [];
 		}
 	}
 };

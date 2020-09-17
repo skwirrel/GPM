@@ -13,13 +13,13 @@ const processFunctions = {
 /*
 [pattern]
 If only one pattern is included then this pattern is optional
-If more than one pattern is included separated by pipe's (|) then one of the patterns must macth - one of the patterns can be the empty string to make the whole thing options - but this must be either the first of the last sub-match e.g. [|option 1|option 2] or [option 1|option 2|], but not [option 1||option 2]
+If more than one pattern is included separated by pipe's (|) then one of the patterns must macth - one of the patterns can be the empty string to make the whole thing options - but this must be either the first or the last sub-match e.g. [|option 1|option 2] or [option 1|option 2|], but not [option 1||option 2]
 
 [replacement:pattern]
-If the square bracket starts with replacement text followed by a colon, then if the brackets match then the matching text is replaced by the replacement text
+If the square bracket starts with replacement text followed by a colon, then if the brackets matches then the matching text is replaced by the replacement text
 If a replacement is combined with the empty string match (i.e. [|option] or [option|] ) then the position of the empty string (at the start or end) is significant
-- If the empty string is at the start (i.e. [|option] ) then the replacement text for will only be used for non-empty matches - i.e. if nothing in the square brackets matches the replacement text will not be inserted
-- If the empty string is at the start (i.e. [option|] ) then the replacement text for will only be used for all matches - even if the "match" is actually matching on the empty string (i.e. nothing)
+- If the empty string is at the start (i.e. [|option] ) then the replacement text will only be used for non-empty matches - i.e. if nothing in the square brackets matches the replacement text will not be inserted
+- If the empty string is at the start (i.e. [option|] ) then the replacement text will only be used for all matches - even if the "match" is actually matching on the empty string (i.e. nothing)
 
 (storeMatchName:pattern)
 If the pattern matches then the value of the match is stored and returned in the key specified by storeMatchName
@@ -45,10 +45,69 @@ The following built in match functions are defined
 */
 
 const phrasebook = {
-    please          : '[(polite:[please])]',
-    canYou          : '[[can|could|will] you]',
+    commandHeader   : '[(polite:[please])] [[can|could|will] you]',
+    commandTrailer  : '[for me] [(polite:[please])]',
+    /* Use these if the TTS engine returns numbers as words
+    // Numbers
+    number1To19     : '[a|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen]',
+    number1To99     : '[$number1To19|[twenty|thirty|fourty|fifty|sixty|seventy|eighty|ninety] [|one|two|three|four|five|six|seven|eight|nine]]',
+    number1To999    : '[$number1To99|$number1To19 hundred [[and] $number1To99]|$number1To99 $number1To99]',
+    number1To999999 : '[$number1To999|$number1To999 thousand [[and] $number1To999]]',
+    number1To999999999 : '[$number1To999999|(millions:$number1To999) million [[and] $number1To999999]]',
+    // Durations
+    secondsDuration : '$number1To999999 second[s]',
+    minutesDuration : '[$secondsDuration|$number1To999 minute[s] [[and] $secondsDuration]]',
+    hoursDuration : '[$minutesDuration|$number1To99 hour[s] [[and] $minutesDuration]]',
+    daysDuration : '[$hoursDuration|$number1To999 day[s] [[and] $hoursDuration]]',
+    */
+    // Use these if the TTS engine returns numbers as digits
+    secondsDuration : '[[1:a|one]|<number:1>] second[s]',
+    minutesDuration : '[$secondsDuration|[[1:a|one]|<number:1>] minute[s] [[and] $secondsDuration]]',
+    hoursDuration : '[$minutesDuration|[[1:an|one]|<number:1>] hour[s] [[and] $minutesDuration]]',
+    daysDuration : '[$hoursDuration|[[1:a|one]|<number:1>] day[s] [[and] $hoursDuration]]',
 }
 
+function exhaustiveReplace( str, regex, replacement ) {
+    let newStr=str;
+    do {
+        str=newStr
+        newStr = str.replace(regex,replacement);
+    } while ( newStr !== str );
+    return newStr;
+}
+
+const numberLookup = {
+    a:1,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,thirty:30,fourty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90,hundred:100,thousand:1000,million:1000000
+}
+
+function convertNumber(str) {
+    let parts = str.split(/\s+/g);
+    parts = parts.map(part=>numberLookup.hasOwnProperty(part)?numberLookup[part]:part);
+    number = parts.join(' ').replace(/\b(\d)0 (\d)\b/g,'$1$2');
+    number = number.replace(/\b1(0+) 1(0+)\b/g,'1$1$2');
+    number = exhaustiveReplace( number, /(\d+) (\d+00+) and (\d{1,2})/g, function(match,p1,p2,p3){ replaced=true; return parseInt(p1)*parseInt(p2)+parseInt(p3)});
+    number = exhaustiveReplace(number,/\b(\d+) 1(0+)\b/g,'$1$2');
+    number = exhaustiveReplace( number, /\b(\d+)000 (\d{1,3}\b)/g, '$1$2');
+    number = exhaustiveReplace( number, /\b(\d+)000000 (\d{1,6}\b)/g, '$1$2');
+    number = exhaustiveReplace( number, /\b(\d+) (\d+)\b/g, '$1$2');
+    return number;
+}
+
+const durationLookup = {
+    second:1,minute:60,hour:3600,day:86400
+}
+
+function convertDuration(duration) {
+    duration = convertNumber(duration);
+    var total=0;
+    duration.replace(/\b(\d+)\s+(second|hour|minute|day)s?\b/g,function(match,p1,p2){ total+=durationLookup.hasOwnProperty(p2)?parseInt(p1)*durationLookup[p2]:0 } );
+    return total;
+}
+
+automaticMatchProcessors = {
+    Duration    : convertDuration,
+    Number      : convertNumber,
+}
 
 const contexts = {
 }
@@ -75,7 +134,7 @@ mapSubdirectories(__dirname+'/capabilities/',function(objectDir, objectName,type
                     if (!contexts.hasOwnProperty(context)) contexts[context]=[];
                     for (let incantationIdx=0; incantationIdx<capability.incantations.length; incantationIdx++) {
                         contexts[context].push([
-                            capability.incantations[incantationIdx],
+                            '$commandHeader '+capability.incantations[incantationIdx]+' $commandTrailer',
                             capability.handler
                         ]);
                     }
@@ -86,7 +145,6 @@ mapSubdirectories(__dirname+'/capabilities/',function(objectDir, objectName,type
 });
 
 for( let context in contexts ) {
-    console.log('>',context);
     contexts[context] = new pattern.MultiPattern({
         commands:           contexts[context],
         phrasebook:         phrasebook,
@@ -103,7 +161,9 @@ function Assistant( manager ) {
     this.listenerStarted = false;
     this.spawnListener();
     this.currentContext = '';
-    this.artificalUtterances = false;
+    this.artificialUtterances = false;
+    this.onNextWakeActions = [];
+    this.contextHandlesStop = false;
 }
 
 Assistant.prototype.spawnListener = function() {
@@ -157,26 +217,41 @@ Assistant.prototype.offerTrigger = function(trigger,data) {
     return false;
 }
 
-Assistant.prototype.run = function( trigger, data ) {
-    console.log('Running Assistant ')
+Assistant.prototype.onNextWake = function( action ) {
+    this.onNextWakeActions.push(action);
+}
 
+Assistant.prototype.run = function( trigger, data ) {
+    console.log('Running Assistant ');
+    let self = this;
+    this.currentContext='';
+    
     this.trigger = trigger;
     if (this.trigger=='wakeword') {
         this.manager.play('sounds/bleep.mp3');
-        this.artificalUtterances = false;
+        this.artificialUtterances = false;
     } else {
         // if the trigger is not "wakeword" then it must be "assistant"
         // in this case data is either an articial utterance - or an array of artificial utterances
-        if (typeof(data)=='string') this.artificalUtterances = [ data ];
-        else this.artificalUtterances = data;
+        if (typeof(data)=='string') this.artificialUtterances = [ data ];
+        else this.artificialUtterances = data;
     }
-    this.listen();
+
+    // Actually start listening once all the onNextWake actions are complete
+    this.onNextWakeActions.unshift(function(){ self.listen(); });
+    
+    let doNextWakeAction = function() {
+        if (self.onNextWakeActions.length>1) console.log('Doing onNextWake action');
+        (self.onNextWakeActions.pop())(doNextWakeAction);
+    }
+
+    doNextWakeAction();    
 }
 
 Assistant.prototype.listen = function( ) {
     this.listening = true;
-    if (this.artificalUtterances!==false) {
-        if (this.artificalUtterances.length) this.heard( this.artificalUtterances.shift() );
+    if (this.artificialUtterances!==false) {
+        if (this.artificialUtterances.length) this.heard( this.artificialUtterances.shift() );
         else this.heard('<timeout>');
     } else {
         let result = this.listener.stdin.write("listen\n");
@@ -208,11 +283,13 @@ Assistant.prototype.heard = function( utterance ) {
     utterance = utterance.toLowerCase().replace(/[^a-z0-9 ]+/g,'');
 
     // If they didn't say anything - or they said a stop work then stop listening
-    if (!utterance.length || stopWords.includes( utterance )) {
+    // but not if the last handler put us in a context where it wants to handle stop words
+    if (!this.contextHandlesStop && (!utterance.length || stopWords.includes( utterance ))) {
         console.log('finishing');
 		this.done();
 		return false;
 	}
+    this.contextHandlesStop=false;
 
     // This is where the magic happens!
     let validContexts = [];
@@ -226,15 +303,84 @@ Assistant.prototype.heard = function( utterance ) {
     
     for( let i=0; i<validContexts.length; i++ ) {
         let result = contexts[validContexts[i]].match( utterance );
-
         // Handle recognized stuff first
         if ( typeof( result.handler ) == 'function' ) {
-            // Call the handler passing the callback for them to call when they are finished
-            let newContext = result.handler( result.textMatchData, this.manager, function() {
-                self.listen();
-            });
-            if (typeof(newContext)=='string' && newContext.length) this.currentContext = newContext;
-            else this.currentContext = '';
+            /* The handler is passed a callback. The handler must EITHER
+                1. Call the callback it is passed
+                OR
+                2. Return an object (even if only an empty one) and NOT call the callback
+                The handler must do one or other of these, BUT NOT BOTH.
+                
+                What happens next is determined by the options object which is either passed in the to callback,
+                or returned by the handler function. The possible options are:
+                *
+                    keepListening: whether to listen for follow-on utterances - default: true
+                    say: a string to say to the user (before listening) - default: ''
+                    cachable: whether the thing to be said should be cached or not - default: true
+                    do: a function to call that actually does the action the user has requested
+                        This will be called either straight away, or later on if the user has delayed the action
+                        e.g. by saying "in five minutes time ...."
+                    undo: a function to call that undoes the action - this is only used if the user says
+                        e.g. "do <thing> for 10 minutes" - the undo funtion will be called 10 minutes after the do function
+                    newContext: the new context to use when interpreting future utterances
+                    contextHandlesStop: set this to true if the newContext wants to handle stop words and no response from the user (timeout)
+                        normally these would just cause the assistant to give up, but sometimes you want to talk to the user
+                        or dosomething after this happens.
+            */
+            let safetyTimeout = false;
+            
+            let processHandlerResult = function(options) {
+                
+                // If the response is just a string then use this as the "say" option and defaults for everything else
+                if (typeof(options)=='string') options = { say: options };
+                
+                if (options.contextHandlesStop) self.contextHandlesStop=true;
+                
+                if (safetyTimeout) clearTimeout(safetyTimeout);
+                
+                if (typeof(options.newContext)=='string' && options.newContext.length) self.currentContext = options.newContext;
+                else self.currentContext = '';
+                
+                // for now we are always doing the "do" straight away, but in due course there is the option of adding a timeout here
+                if (typeof(options.do)=='function') options.do();
+                // undo isn't implemented yet
+                
+                let finishOff = function(){
+                    if (options.keepListening===false) {
+                        console.log('handler told us to stop listening');
+                        self.done();
+                    } else {
+                        self.listen();
+                    }
+                };
+                
+                if (typeof(options.say)=='string' && options.say.length) {
+                    self.manager.say(options.say,options.cachable!==false,finishOff);
+                } else finishOff();
+            };
+            
+            // run any automaticMatchProcessors
+            for (let suffix in automaticMatchProcessors) {
+                for (let key in result.textMatchData) {
+                    if (key.indexOf(suffix)==key.length-suffix.length) {
+                        result.textMatchData[key] = automaticMatchProcessors[suffix](result.textMatchData[key]);
+                    }
+                }
+            }
+            
+            let handlerResult = result.handler( result.textMatchData, this, processHandlerResult );
+            if (typeof(handlerResult)=='object' || typeof(handlerResult)=='string') processHandlerResult(handlerResult);
+            else {
+                // if the handler doesn't return an object that means it wants to call the callback we passed it instead
+                // but set a timeout just in case they don't
+                safetyTimeout = setTimeout(function(){
+                    console.log('Handler didn\'t respond in time - running safety handler');
+                    processHandlerResult({
+                        say: 'Hmm... looks like something went wrong. Sorry!'
+                    });
+                },15000);
+            }
+            
             return true;
         }
     }
@@ -242,6 +388,78 @@ Assistant.prototype.heard = function( utterance ) {
 	// Didn't recognize the utterance - or no handler defined
     this.manager.say('Sorry. I don\'t understand.',true,function(){ self.listen(); });
     return false;    
+}
+
+// ==========================================================================================
+// Utility functions used by various capabilities
+// ==========================================================================================
+
+let durationParts = {
+    week   : 86400*7,
+    day    : 86400,
+    hour   : 3600,
+    minute : 60,
+    second : 1
+}
+Assistant.prototype.describeDuration = function( s ) {
+    let parts=[];
+    for( let part in durationParts ) {
+        let p = Math.floor(s/durationParts[part]);
+        if (p>0) {
+            parts.push( p+' '+part+(p>1?'s':'') );
+            s = s % durationParts[part];
+            if (s==0) break;
+        }
+    }
+    
+    return this.englishJoin(parts)
+}
+
+Assistant.prototype.englishJoin = function( list, separator=',' ) {
+    if (!list.length) return '';
+    if (list.length==1) return list[0];
+    let result = (separator==';'?';':'') + ' and '+list.pop();
+    return list.join(separator+' ') + result;
+}
+
+
+// See https://stackoverflow.com/questions/4558437/programmatically-determine-whether-to-describe-an-object-with-a-or-an
+Assistant.prototype.indefiniteArticle = function(phrase) {
+
+    // Getting the first word 
+    let word = phrase.match(/^\w+/)
+    if (word) word = word[0].toLowerCase();
+    else return '';
+
+    // Numbers
+    if (word.match(/^(8|11|18|8\d+)$/)) return 'an ';
+    if (word.match(/^\d/)) return 'a ';
+    
+    // Specific start of words that should be preceeded by 'an '
+    var alt_cases = ["honest", "hour", "hono"];
+    for (var i in alt_cases) {
+        if (word.indexOf(alt_cases[i]) == 0) return "an ";
+    }
+
+    // Single letter word which should be preceeded by 'an'
+    if (word.length == 1) {
+        if ("aedhilmnorsx".indexOf(l_word) >= 0) return "an ";
+        else return "a ";
+    }
+
+    // Special cases where a word that begins with a vowel should be preceeded by 'a'
+    regexes = [/^e[uw]/, /^onc?e\b/, /^uni([^nmd]|mo)/, /^u[bcfhjkqrst][aeiou]/]
+    for (var i in regexes) {
+        if (word.match(regexes[i])) return "a "
+    }
+
+    // Special capital words (UK, UN)
+    if (word.match(/^u[nk]/)) return "a ";
+
+    // Basic method of words that begin with a vowel being preceeded by 'an'
+    if ("aeiou".indexOf(word) >= 0) return "an ";
+
+    return "a ";
 }
 
 module.exports = Assistant;

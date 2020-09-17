@@ -34,11 +34,11 @@ Manager.prototype.startTts = function() {
 	
 	this.tts = spawn(ttsConfig.shift(),ttsConfig);
 	this.tts.stderr.on('data',function(data){
-		console.log('TTS returned errors: '+data);
+		console.log('TTS returned errors: '+data.toString().trim());
 	});
 	
 	this.tts.stdout.on('data',function(data){
-		console.log('TTS responded: '+data);
+		console.log('TTS responded: '+data.toString().trim());
 		if (self.sayCallbackStack.length) self.sayCallbackStack.pop()();
 	});
 
@@ -63,10 +63,18 @@ Manager.prototype.say = function( utterance, chachable, callback ) {
 	this.tts.stdin.write( chachable+':'+utterance+"\n" );
 }
 
-Manager.prototype.play = function( file, callback  ) {
-    let child = spawn('/usr/bin/play', [file]);
+// Plays a file - returns a function which can be called to stop the audio playback
+Manager.prototype.play = function( file, callback, repeat=1  ) {
+    console.log('Playing audio: '+file);
+    let args = [file];
+    if (repeat>1) args.push('repeat',repeat);
+    let child = spawn('/usr/bin/play', args);
+    
     if (callback) {
         child.on('exit',callback);
+    }
+    return function(){
+        child.kill( 'SIGINT' );
     }
 }
 
@@ -151,13 +159,13 @@ function loadObject(objectDir, objectName,type){
     }
 }
 
+// Load in and initialisae all the tasks, triggers and audio player
 mapSubdirectories('./tasks/',loadObject,'task');
 mapSubdirectories('./triggers/',loadObject,'trigger');
 mapSubdirectories('./audioPlayers/',loadObject,'audioPlayer');
 
-console.log(manager.audioPlayers);
-
-// Load in and initialisae all the
 spawn('/usr/bin/play', ['sounds/ready.mp3']);
 
-
+setTimeout(function() {
+    console.log('Setup phase complete\n===================================\n');
+},1000);
