@@ -7,3 +7,4 @@ python3-pyaudio
 portaudio19-dev
 libsndfile1
 libasound2-dev
+libavahi-compat-libdnssd-dev

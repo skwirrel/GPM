@@ -1,0 +1,254 @@
+const config = require('../../configLoader.js')({},__filename);
+
+//=======================================================================================
+// Minimal web server to serve audio files to chromecast devices
+//=======================================================================================
+
+// Determine the IP address of this machine
+const { networkInterfaces } = require('os');
+const randomBytes = require("crypto").randomBytes;
+
+const nets = networkInterfaces();
+
+let myIp = false;
+
+if (config.chromecastServerIP) {
+    myIp = config.chromecastServerIP;
+} else {
+    for (let name in nets) {
+        for (let net of nets[name]) {
+            // skip over non-ipv4 and internal (i.e. 127.0.0.1) addresses
+            if (net.family.toLowerCase() === 'ipv4' && !net.internal) {
+                myIp = net.address;
+                break
+            }
+        }
+    }
+}
+
+var fileMap = {};
+
+if (!myIp.length) {
+    console.log('There was a problem determining the IP address of this machine. Chromecast playback will not be available.');
+} else {
+    const http = require("http"),
+    url = require("url"),
+    path = require("path"),
+    fs = require("fs")
+    port = config.chromecastServerPort || 8888;
+
+    http.createServer(function(request, response) {
+
+        let contentTypesByExtension = {
+            '.html': "text/html",
+            '.css':  "text/css",
+            '.js':   "text/javascript"
+          };
+
+        let uri = url.parse(request.url).pathname;
+        // Take the slash off the front
+        uri = uri.substr(1);
+                
+        if (!fileMap.hasOwnProperty(uri)) {
+            response.writeHead(404, {"Content-Type": "text/plain"});
+            response.write("404 Not Found\n");
+            response.end();
+            console.log('Web server encountered request for unknown file: '+uri);
+            return;
+        }
+
+        let filename = fileMap[uri][0];
+        console.log('Serving file: '+filename);
+        fs.readFile(filename, "binary", function(err, file) {
+            if (err) {
+              response.writeHead(500, {"Content-Type": "text/plain"});
+              response.write(err + "\n");
+              response.end();
+              return;
+            }
+          
+            let headers = {};
+            let contentType = contentTypesByExtension[path.extname(filename)];
+            if (contentType) headers["Content-Type"] = contentType;
+            response.writeHead(200, headers);
+            response.write(file, "binary");
+            response.end();
+        });
+    }).listen(parseInt(port, 10));
+
+    console.log('Static file server running at http://'+myIp+':' + port);
+}
+
+function serveFile( filename ) {
+    let id;
+    // Tidy out any files added more than 1 day ago
+    let threshold = new Date().getTime() - 86400000;
+    for( id in fileMap ) {
+        if (fileMap[id][1]<threshold) delete fileMap[id]
+    }
+
+    id = randomBytes(20).toString('hex');
+    fileMap[id] = [
+        filename,
+        new Date().getTime()
+    ];
+    return 'http://'+myIp+':'+port+'/'+id;
+}
+
+//=======================================================================================
+// Chromecast Audio Player
+//=======================================================================================
+
+const Client                = require('castv2-client').Client;
+const DefaultMediaReceiver  = require('castv2-client').DefaultMediaReceiver;
+const mdns                  = require('mdns-js');
+
+
+function audioPlayer( attributes ) {
+    this.host = attributes.host;
+    this.name = attributes.fn;
+    this.client = false;
+    this.interupted = 0;
+    this.actuallyPlaying = false;
+    this.theoreticallyPlaying = false;
+    this.playlist = [];
+}
+
+audioPlayer.prototype.startPlayer = function() {
+}
+
+audioPlayer.prototype.setVolume = function( percent ) {
+    this.volume=percent;
+}
+
+audioPlayer.prototype.increaseVolume = function( percent=10 ) {
+    if (this.volume==100) return;
+    
+    this.setVolume( Math.min(100,this.volume+percent) );
+}
+
+audioPlayer.prototype.decreaseVolume = function( percent=10 ) {
+    if (this.volume==0) return;
+    
+    this.setVolume( Math.max(0,this.volume-percent) );
+}
+
+audioPlayer.prototype.nowPlaying = function( callback ) {
+    return callback( self.playlist[i] );
+}
+
+audioPlayer.prototype.interupt = function() {
+    this.interupted++;
+    if (this.actuallyPlaying) this.pause();
+}
+
+audioPlayer.prototype.resume = function() {
+    this.interupted--;
+    if (!this.interupted) {
+        if (this.theoreticallyPlaying) this.play();
+    }
+}
+
+// This tells the manager/tasks if the player is currently playing - it returns true if the player was playing but has been temporarily interupted
+audioPlayer.prototype.isPlaying = function() {
+    return this.theoreticallyPlaying;
+}
+
+audioPlayer.prototype.launch = function() {
+    
+    // set this.player to "connecting" to indicate that we are in the process of connecting
+    this.player = 'connecting';
+    client.connect(this.host, function() {
+        console.log('Chromecast connected on %s',this.name);
+     
+        client.launch(DefaultMediaReceiver, function(err, player) {
+            console.log('Chromecast Media Player running on %s',this.name);
+
+            this.player = player;
+        }
+    }
+}
+audioPlayer.prototype.playerAction( callback ) {
+    if (!
+    callback(this.player);
+}
+    
+
+audioPlayer.prototype.play = function() {
+    this.theoreticallyPlaying=true;
+    if (this.interupted || this.actuallyPlaying) return;
+    this.playerAction()
+    if (!this.player) this.launch();
+    
+    this.actuallyPlaying=true;
+}
+
+audioPlayer.prototype.pause = function() {
+    this.theoreticallyPlaying=false;
+    if (!this.actuallyPlaying) return;
+    this.actuallyPlaying=false;
+}
+
+audioPlayer.prototype.next = function() {
+}
+
+audioPlayer.prototype.previous = function() {
+}
+
+audioPlayer.prototype.makeTemporaryPlaylist = function( tracks ) {
+    let trackList = tracks.map( track => track.path ).join("\n");
+    
+    if (!trackList.length) return false;
+    
+    // Create the temporary file
+    const tempPath = path.join(os.tmpdir(), 'playlist-');
+    const tempDir = fs.mkdtempSync(tempPath)
+    const tempFile = tempDir+'/playlist.m3u8';
+    console.log('Create temporary playlist: '+tempFile);
+    console.log(trackList);
+    fs.writeFileSync(tempFile, trackList);
+    
+    setTimeout(function() {
+        console.log('Deleted temporary playlist: '+tempFile);
+        //fs.unlinkSync(tempFile);
+        //fs.rmdirSync(tempDir);
+    },1000);
+    return tempFile;
+}
+
+audioPlayer.prototype.enqueue = function( tracks, append=false ) {
+}
+
+audioPlayer.prototype.shutdown = function( ) {
+}
+
+if (myIp.length) {
+    var browser = mdns.createBrowser(mdns.tcp('googlecast'));
+    var registerPlayerCallback;
+
+    browser.on('ready', function onReady() {
+      console.log('MDNS browser is ready (looking for Chromecast devices)');
+      browser.discover();
+    });
+
+    browser.on('update', function onUpdate(data) {
+        if (!data.txt || !data.txt.length) return;
+        let attributes = {};
+        for( let i=0; i<data.txt.length; i++ ) {
+            let[ key, value ] = data.txt[i].split('=',2);
+            attributes[key]=value;
+        }
+        console.log('Found Chromecast: '+attributes.fn);
+
+        attributes.host = data.host;
+        registerPlayerCallback( new audioPlayer( attributes ), attributes.fn );
+    });
+
+    setTimeout(function onTimeout() {
+        console.log('Stopped looking for Chromecast devices');
+        browser.stop();
+    }, 5000);
+}
+
+
+module.exports = { passRegisterCallback : function(callback){ registerPlayerCallback = callback; } }

@@ -7,8 +7,36 @@ process.env.UV_THREADPOOL_SIZE = 100;
 
 const config = require('./configLoader.js')({},process.argv.pop());
 
+// Various things need to know the IP address of this server
+const networkInterfaces = require('os').networkInterfaces();
+
+global.myIp = false;
+
+if (config.myIP) {
+    global.myIp = config.myIP;
+} else {
+    for (let name in networkInterfaces) {
+        for (let net of networkInterfaces[name]) {
+            console.log(net);
+            // skip over non-ipv4 and internal (i.e. 127.0.0.1) addresses
+            if (net.family.toLowerCase() === 'ipv4' && !net.internal) {
+                global.myIp = net.address;
+                console.log('Automatically determined IP address of this machine as: '+global.myIp);
+                if (config.netmask) global.myCidr = global.myIp+'/'+global.netmask;
+                else {
+                    global.myCidr = net.cidr;
+                    console.log('Automatically determined CIDR netblock as: '+global.myCidr);
+                }
+                break
+            }
+        }
+    }
+}
+
 const { spawn } = require('child_process');
 const fs = require('fs');
+const deviceFinder = require('./deviceFinder.js');
+const httpFileServer = require('./httpFileServer.js');
 
 function Manager() {
 	this.routes = [];
@@ -18,10 +46,16 @@ function Manager() {
     this.queue = [];
 	this.busy = false;
 	this.running = '';
-	this.sayCallbackStack=[];
+    this.sayCallbackStack=[];
+    this.devices = new deviceFinder();
+    this.httpFileServer = new httpFileServer();
 	
     // Start up the TTS engine;
     this.startTts();
+}
+
+Manager.prototype.serveFile = function( filename ) {
+    return this.httpFileServer.serveFile( filename );
 }
 
 Manager.prototype.startTts = function() {
@@ -118,7 +152,9 @@ Manager.prototype.done = function() {
 }
 
 Manager.prototype.register = function(type, thing, name) {
-    this[type+'s'][name] = thing;
+    if (type=='device') this.devices.register(name, thing);
+    else this[type+'s'][name] = thing;
+    console.log('Registering new '+type+': '+name);
 }
 
 Manager.prototype.trigger = function( trigger, data ) {
@@ -131,12 +167,62 @@ Manager.prototype.trigger = function( trigger, data ) {
     }
 }
 
+let localSpeakerRegexp = /^(this speaker|this device|here)$/;
+Manager.prototype.findAudioPlayer = function( player ) {
+    if (player==='' || typeof(player)=='undefined') return 'local';
+    if (player.match(localSpeakerRegexp)) return 'local';
+    prefixes = ['','the','speaker in the','chromecast in the'];
+    suffixes = ['','speaker','chromecast'];
+
+    for (let prefix of prefixes) {
+        for (let suffix of suffixes) {
+            let name = (prefix.length?prefix+' ':'')+player+(suffix.length?' '+suffix:'');
+            console.log('Looking for '+name+' amongst'+Object.keys(this.audioPlayers));
+            if (this.audioPlayers.hasOwnProperty( name )) return name;
+        }
+    }
+    return false;
+}
+
 Manager.prototype.audioPlayer = function( player, command, ...args ) {
+    
+    player = player.toLowerCase();
     if (typeof(this.audioPlayers[player])=='undefined') {
         console.log('Ignoring command for unrecognised audio player: '+player);
         return false;
     }
+    // if the command is "enqueue" then convert any track paths to track URLs by serving up the files through our web server
+    if (command=='enqueue') {
+        for( let track of args[0] ) {
+            if (!track.hasOwnProperty('url')) track.url = this.serveFile( track.path );
+        }
+    }
     return this.audioPlayers[player][command](...args);
+}
+
+Manager.prototype.activePlayers = function( status='playing' ) {
+    let nowPlaying = [];
+    for( let player in this.audioPlayers ) {
+        console.log('>>>'+player+this.audioPlayers[player].getStatus()+' cf '+status);
+        if (this.audioPlayers[player].getStatus()==status) nowPlaying.push(player);
+    }
+    return nowPlaying;
+}
+
+// Returns a hash of all the players which are currently actually playing something
+// Hash is keyed on player name and value is the track object
+Manager.prototype.nowPlaying = function(callback) {
+    let nowPlaying = {};
+    let activePlayers = this.activePlayers();
+    let waitingFor = activePlayers.length;
+    if (!waitingFor) return callback(false);
+    for( let player of activePlayers ) {
+        this.audioPlayers[player].nowPlaying(function(playing){
+            waitingFor--;
+            if (typeof(playing) =='object') nowPlaying[player] = playing;
+            if (!waitingFor) callback(nowPlaying);
+        });
+    }
 }
 
 var manager = new Manager();
@@ -148,12 +234,18 @@ global.mapSubdirectories = function(source,callback,...args) {
 }
 
 function loadObject(objectDir, objectName,type){
+    console.log('Loading '+type+': '+objectName);
     if (!fs.existsSync(objectDir+objectName+'/index.js')) return;
     let result = require(objectDir+objectName);
-    if (type=='audioPlayer') {
-        for( let player in result ) {
-            manager.register(type, result[player],player);
-        }
+
+    // If the included files sets up its things asynchronously then it can't return the object straight away.
+    // Instead it returns a function then we can pass callback to which it can use to register its objects
+    // However, there is no way to tell the difference between a constructor and a plain function.
+    // So if the included file wants to do things asynchronously then it returns an object instead
+    if (typeof(result)=='object') {
+        result.passRegisterCallback(function(object,name){
+            manager.register(type,object,name)
+        },manager);
     } else {
         manager.register(type, new result( manager ),objectName);
     }
@@ -163,6 +255,7 @@ function loadObject(objectDir, objectName,type){
 mapSubdirectories('./tasks/',loadObject,'task');
 mapSubdirectories('./triggers/',loadObject,'trigger');
 mapSubdirectories('./audioPlayers/',loadObject,'audioPlayer');
+mapSubdirectories('./devices/',loadObject,'device');
 
 spawn('/usr/bin/play', ['sounds/ready.mp3']);
 

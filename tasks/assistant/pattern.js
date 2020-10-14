@@ -232,7 +232,8 @@ function _match( state, pattern, functions ) {
 	else if (type=='<') {
 		let functionName = pattern.shift();
 		if (typeof(functions.textMatch[functionName])=='function' || typeof(builtIn.textMatch[functionName])=='function') {
-			let theFunction = functions.textMatch[functionName]=='function' ?
+            if (!state.str.trim().length) return false;
+			let theFunction = typeof(functions.textMatch[functionName])=='function' ?
 				functions.textMatch[functionName] :
 				builtIn.textMatch[functionName]
 			;

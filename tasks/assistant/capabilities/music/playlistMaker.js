@@ -18,7 +18,7 @@ const readline = require('readline');
 const fuzz = require('fuzzball');
 const fuzzLookupOptions = {
     processor: record => record.index,
-    scorer: fuzz.partial_ratio, // Any function that takes two values and returns a score, default: ratio
+    scorer: fuzz.ratio, // Any function that takes two values and returns a score, default: ratio
     limit: 1, // Max number of top results to return, default: no limit / 0.
     cutoff: 60, // Lowest score to return, default: 0
     unsorted: false // Results won't be sorted if true, default: false. If true limit will be ignored.
@@ -172,7 +172,7 @@ function getSimilar(mbid,callback) {
     const url = audioscrobblerBaseUrl + queryString;
     downloadPage(url,function(tracks){
         if (!tracks || !tracks.similartracks || !tracks.similartracks.track) callback('No tracks returned',[]);
-        callback(false,tracks.similartracks.track);
+        else callback(false,tracks.similartracks.track);
     });
 }
 const getSimilarPromise = util.promisify(getSimilar);
@@ -183,46 +183,56 @@ const lookups = {
     track: getRows('select distinct mb_trackid, title from items where genre<>\'Books & Spoken\'','title'),
     album: getRows('select distinct mb_albumid, album from items where genre<>\'Books & Spoken\'','album'),
 };
+// if the type is "something" then look for a matching track, followed by a matching album followed by a matching artist
+lookups.something = lookups.track.concat(lookups.album,lookups.artist);
 
 // console.log(lookups.artist.length+' artists');
 // console.log(lookups.track.length+' tracks');
 
 function fuzzyLookup( type, searchTerm ) {
-    results = fuzz.extract( searchTerm, lookups[type], fuzzLookupOptions);
-    if (!results.length) return false;
-    return results[0][0];
+    let result = fuzz.extract( searchTerm, lookups[type], fuzzLookupOptions);
+    if (!result.length) return [false];
+    result = result[0][0];
+
+    if (type=='something') type = result.hasOwnProperty('artist')?'artist':(result.hasOwnProperty('album')?'album':'track');
+    
+    return [result,type];
 }
 
 function makePlaylist( type, searchTerm, callback ) {
 
-    if (!type.length || ':artist:album:track:random:'.indexOf(type)==-1) return callback('Invalid search type ('+type+'). Expected: "album", "artist", "track" or "random"');
+    if (!type.length || ':artist:album:track:anything:something:'.indexOf(type)==-1) return callback('Invalid search type ('+type+'). Expected: "album", "artist", "track", "anything" or "something"');
     
     var requestedTracks = {};
     let emptyMessage = '';
     let message;
     
     let result;
-    if (type=='random') result = lookups.artist[Math.floor(Math.random()*(lookups.artist.length-0.001))];
-    else result = fuzzyLookup(type.toLowerCase(),searchTerm);
-    
+    if (type=='anything') [result] = lookups.artist[Math.floor(Math.random()*(lookups.artist.length-0.001))];
+    else [result,type] = fuzzyLookup(type.toLowerCase(),searchTerm);
+
     if (!result) {
-        return callback('Couldn\'t find '+type+': '+searchTerm);
+        if (type=='something') type='any music mathing';
+        return callback('Couldn\'t find '+type+': "'+searchTerm+'"');
     } else {
         let tracks;
         message = 'Playing '+type+': '+result[type];
         if (type=='artist') {
-            tracks = getRows('SELECT id, path, album, artist, mb_artistid, mb_trackid FROM items WHERE artist=? ORDER BY RANDOM()',false,result.artist);
+            tracks = getRows('SELECT id, title, path, album, artist, mb_artistid, mb_trackid FROM items WHERE artist=? ORDER BY RANDOM()',false,result.artist);
             emptyMessage = 'Couldn\'t find any music by: '+searchTerm;
+            message = 'Playing music by "'+searchTerm+'"';
         } else if (type == 'track') {
-            tracks = getRows('SELECT id, path, album, artist, mb_artistid, mb_trackid FROM items WHERE title=?',false,result.title);
+            tracks = getRows('SELECT id, title, path, album, artist, mb_artistid, mb_trackid FROM items WHERE title=?',false,result.title);
             emptyMessage = 'Couldn\'t find a track called "'+searchTerm+'"';
+            message = 'Playing the track: "'+searchTerm+'"';
         } else if (type == 'album') {
-            tracks = getRows('SELECT id, path, album, artist, mb_artistid, mb_trackid FROM items WHERE album=? ORDER BY disc,track',false,result.album);
+            tracks = getRows('SELECT id, title, path, album, artist, mb_artistid, mb_trackid FROM items WHERE album=? ORDER BY disc,track',false,result.album);
             emptyMessage = 'Couldn\'t find the album: '+searchTerm;
-        } else if (type == 'random') {
+            message = 'Playing the album: "'+searchTerm+'"';
+    } else if (type == 'anything') {
             // pick an artist at random
             message = 'Playing some music';
-            tracks = getRows('SELECT id, path, album, artist, mb_artistid, mb_trackid FROM items WHERE artist=? ORDER BY RANDOM() LIMIT 1',false,result.artist);
+            tracks = getRows('SELECT id, title, path, album, artist, mb_artistid, mb_trackid FROM items WHERE artist=? ORDER BY RANDOM() LIMIT 1',false,result.artist);
             emptyMessage = 'Couldn\'t find any music at all';
         }
         

@@ -35,7 +35,7 @@ keywords=["porcupine","americano"]
 try:
     porcupine = pvporcupine.create(
         keywords=keywords,
-        sensitivities=[1,1])
+        sensitivities=[0.7,0.7])
 
     with noalsaerr():
         pa = pyaudio.PyAudio()

@@ -21,7 +21,7 @@ language_code = 'en-UK'  # a BCP-47 language tag
 RATE = 16000
 CHUNK = int(RATE / 10)  # 100ms
 SINK_NAME = 'pulse'
-TIMEOUT = 5
+START_TIMEOUT = 3
 
 gcloudCredentials = "~/.GPM/gcloudCredentials.json"
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.expanduser(gcloudCredentials);
@@ -167,7 +167,7 @@ def listen_print_loop(responses):
                 # ignore this packet if we have seen partial responses
                 # the eventual answer will appear in a subsequent response with result.is_final==True
                 if startedSpeaking: continue
-                # Cancel the timeout
+                # cancel the timeout
                 signal.alarm(0)
                 sys.stdout.write("<NOTHING>\n");
                 sys.stdout.flush();
@@ -180,6 +180,9 @@ def listen_print_loop(responses):
             # moves on to considering the next utterance.
             result = response.results[0]
             if not result.is_final:
+                # cancel the timeout
+                signal.alarm(0)
+
                 if result.alternatives:
                     print_error('Interim result :'+result.alternatives[0].transcript);
                 else:
@@ -188,7 +191,7 @@ def listen_print_loop(responses):
 
             # print('final');
             if result.alternatives:
-                # Cancel the timeout
+                # cancel the timeout
                 signal.alarm(0)
 
                 print_error('Final result');
@@ -206,7 +209,7 @@ def listen_print_loop(responses):
     return count
 
 def listen():
-    global language_code, RATE, enums, types, speech, TIMEOUT
+    global language_code, RATE, enums, types, speech, START_TIMEOUT
 
     client = speech.SpeechClient()
     config = types.RecognitionConfig(
@@ -249,8 +252,8 @@ def listen():
             requests = (types.StreamingRecognizeRequest(audio_content=content)
                         for content in audio_generator)
 
-            # Set a timeout in case anything goes wrong
-            signal.alarm(TIMEOUT)
+            # Set a START_TIMEOUT in case anything goes wrong
+            signal.alarm(START_TIMEOUT)
 
             responses = client.streaming_recognize(streaming_config, requests)
 
@@ -267,7 +270,7 @@ def listen():
             stream.close()
             return
 
-def timeoutHandler(signum, frame):
+def START_TIMEOUTHandler(signum, frame):
     global PY_AUDIO
     print_error("Timed out waiting for response")
     print("<timeout>")
@@ -277,7 +280,7 @@ def timeoutHandler(signum, frame):
 def main():
     global PY_AUDIO
 
-    signal.signal(signal.SIGALRM, timeoutHandler)
+    signal.signal(signal.SIGALRM, START_TIMEOUTHandler)
     listen()
     print_error('Giving up')
     PY_AUDIO.terminate()

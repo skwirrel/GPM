@@ -85,8 +85,7 @@ let capabilities = [
         ],
         handler         : function( matchDetails, assistant, callback ) {
             let duration = matchDetails.timerDuration;
-            let durationWords = assistant.describeDuration(duration);
-            durationWords = durationWords.replace(/(day|minute|hour|second)s/g,'$1');
+            let durationWords = assistant.describeDuration(duration,-1);
             
             let name = matchDetails.hasOwnProperty('name') ? matchDetails.name : '';
 

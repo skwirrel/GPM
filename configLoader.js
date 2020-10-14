@@ -75,7 +75,6 @@ module.exports = function(defaults,location){
     
     let dir = location || require.main.filename;
     let subdir = '';
-
     // Find the locations of the relevant config files
     while (dir.length>1) {
         subdir = path.basename(dir)+'/'+subdir;
@@ -85,10 +84,13 @@ module.exports = function(defaults,location){
             mainConfigLocation = lookingFor+'/main.json';
             configLocation = lookingFor+'/'+subdir;
             configLocation = configLocation.replace(/\.(js|py)\/$/,'.json');
+            // if the file we are looking for is "index.json" but this doesn't exist then look for <directory>.json instead
+            if (configLocation.match(/\/index\.json$/) && !fs.existsSync(configLocation)) {
+                configLocation = configLocation.replace(/\/index\.json$/,'.json');
+            }
             break;
         }
     }
-
     config = mergeDeep(
         defaults,
         fs.existsSync(mainConfigLocation) ? hjson.parse(fs.readFileSync(mainConfigLocation, 'utf-8')) : {},

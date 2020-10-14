@@ -10,6 +10,8 @@ const processFunctions = {
     'uppercase': function(str) { return str.toUpperCase(); },
 };
 
+const stopWords = [ 'timeout','nothing','cancel','cancel thanks','thats all','thats all thanks','ok','ok thanks','forget it','thanks' ]
+
 /*
 [pattern]
 If only one pattern is included then this pattern is optional
@@ -65,6 +67,13 @@ const phrasebook = {
     minutesDuration : '[$secondsDuration|[[1:a|one]|<number:1>] minute[s] [[and] $secondsDuration]]',
     hoursDuration : '[$minutesDuration|[[1:an|one]|<number:1>] hour[s] [[and] $minutesDuration]]',
     daysDuration : '[$hoursDuration|[[1:a|one]|<number:1>] day[s] [[and] $hoursDuration]]',
+    delayStart : '[(ignoreDelay:ignore delay)] [in (delayStartDuration:$daysDuration) [time]]',
+    autoStop : '[for (actionDuration:$daysDuration)]',
+    
+    singleDigitInteger : '[0|1|2|3|4|5|6|7|8|9]',
+    doubleDigitInteger : '$singleDigitInteger[$singleDigitInteger]',
+    tripleDigitInteger : '$doubleDigitInteger[$singleDigitInteger]',
+    percentage : '[$doubleDigitInteger|100][%| percent]',
 }
 
 function exhaustiveReplace( str, regex, replacement ) {
@@ -127,6 +136,7 @@ mapSubdirectories(__dirname+'/capabilities/',function(objectDir, objectName,type
             let capability = capabilityList[capabilityIdx];
             if (capability.hasOwnProperty('incantation')) capability.incantations = [capability.incantation];
             if (capability.hasOwnProperty('context')) capability.contexts = [capability.context];
+            if (!capability.hasOwnProperty('context') && !capability.hasOwnProperty('contexts')) capability.contexts = ['main'];
 
             if (capability.hasOwnProperty('contexts') && capability.hasOwnProperty('incantations') && capability.hasOwnProperty('handler')) {
                 for (let contextIdx=0; contextIdx < capability.contexts.length; contextIdx++ ) {
@@ -225,6 +235,7 @@ Assistant.prototype.run = function( trigger, data ) {
     console.log('Running Assistant ');
     let self = this;
     this.currentContext='';
+    this.delayStart=0;
     
     this.trigger = trigger;
     if (this.trigger=='wakeword') {
@@ -273,14 +284,13 @@ Assistant.prototype.done = function() {
     }
 }
 
-const stopWords = [ 'timeout','nothing','cancel','cancel thanks','thats all','thats all thanks','stop','ok','ok thanks','forget it','thanks' ]
 Assistant.prototype.heard = function( utterance ) {
     var self = this;
     this.listening = false;
     console.log('Assistant heard: ',utterance);
     
     // Remove punctuation etc
-    utterance = utterance.toLowerCase().replace(/[^a-z0-9 ]+/g,'');
+    utterance = utterance.toLowerCase().replace(/[^a-z0-9% ]+/g,'');
 
     // If they didn't say anything - or they said a stop work then stop listening
     // but not if the last handler put us in a context where it wants to handle stop words
@@ -305,21 +315,34 @@ Assistant.prototype.heard = function( utterance ) {
         let result = contexts[validContexts[i]].match( utterance );
         // Handle recognized stuff first
         if ( typeof( result.handler ) == 'function' ) {
+            
+            if (result.textMatchData.ignoreDelay) delete result.textMatchData.delayStartDuration;
+            
             /* The handler is passed a callback. The handler must EITHER
                 1. Call the callback it is passed
-                OR
                 2. Return an object (even if only an empty one) and NOT call the callback
                 The handler must do one or other of these, BUT NOT BOTH.
+                OR
+                3. Return a string and NOT call the callback - the string is taken to be the response to the user,
+                   all other options are as per the defaults.
                 
                 What happens next is determined by the options object which is either passed in the to callback,
                 or returned by the handler function. The possible options are:
                 *
                     keepListening: whether to listen for follow-on utterances - default: true
                     say: a string to say to the user (before listening) - default: ''
+                        If a "do" function is returned this indicates that the capability supports delayed start.
+                        If so the the say value can be an array of two values - the first in the present tense and the second in the future tense
+                           the future tense version will only be used if a delay was specified in which case it will be preface by...
+                           "In xxx seconds time I will..."
+                    play: a sound to play - this is played before saying anything set in the "set" parameter
                     cachable: whether the thing to be said should be cached or not - default: true
                     do: a function to call that actually does the action the user has requested
                         This will be called either straight away, or later on if the user has delayed the action
                         e.g. by saying "in five minutes time ...."
+                        If "do" is set but === false, this indicates that there was an error and the delayed action should be aborted
+                        If "do" is === true, this indicates that there is no specific do handler - just that the utterance should be replayed
+                           at the specified time
                     undo: a function to call that undoes the action - this is only used if the user says
                         e.g. "do <thing> for 10 minutes" - the undo funtion will be called 10 minutes after the do function
                     newContext: the new context to use when interpreting future utterances
@@ -330,20 +353,43 @@ Assistant.prototype.heard = function( utterance ) {
             let safetyTimeout = false;
             
             let processHandlerResult = function(options) {
-                
                 // If the response is just a string then use this as the "say" option and defaults for everything else
                 if (typeof(options)=='string') options = { say: options };
                 
                 if (options.contextHandlesStop) self.contextHandlesStop=true;
                 
                 if (safetyTimeout) clearTimeout(safetyTimeout);
-                
+                safetyTimeout=0;
+
                 if (typeof(options.newContext)=='string' && options.newContext.length) self.currentContext = options.newContext;
                 else self.currentContext = '';
+             
+                if (validContexts[i]=='main') self.delayStart = result.textMatchData.hasOwnProperty('delayStartDuration') ? parseInt(result.textMatchData.delayStartDuration) : 0;
                 
-                // for now we are always doing the "do" straight away, but in due course there is the option of adding a timeout here
-                if (typeof(options.do)=='function') options.do();
-                // undo isn't implemented yet
+                // delayed start is only supported if "do" is returned
+                if (options.hasOwnProperty('do')) {
+                    if (!self.delayStart && typeof(options.do)=='function') options.do();
+                    else if (self.delayStart && options.do!==false) {
+                        
+                        console.log('Delaying action for '+self.delayStart+' seconds');
+                        if (typeof(options.do)=='function') setTimeout( options.do, self.delayStart*1000 );
+                        else if (options.do===true) {
+                            // If there is no specific "do" function then just replay the utterance later
+                            setTimeout( function(){
+                                self.manager.enqueueTask( 'assistant', 'assistant', 'ignore delay '+utterance );
+                            }, self.delayStart*1000 );
+                        }
+                        
+                        // See if the handler returned a future tense version of the spoken response
+                        if (Array.isArray(options.say) && options.say.length>1) options.say='OK. In '+self.describeDuration(self.delayStart,true)+' time I will '+options.say[1];
+                        else options.say='OK. I\'ll do that in '+self.describeDuration(self.delayStart,true)+' time';
+                    }
+                    if (Array.isArray(options.say)) options.say=options.say[0];
+                }
+                
+                if (typeof(options.undo)=='function' && result.textMatchData.hasOwnProperty('actionDuration')) {
+                    setTimeout( options.undo, (self.delayStart + result.textMatchData.actionDuration) * 1000 );
+                }
                 
                 let finishOff = function(){
                     if (options.keepListening===false) {
@@ -354,15 +400,24 @@ Assistant.prototype.heard = function( utterance ) {
                     }
                 };
                 
-                if (typeof(options.say)=='string' && options.say.length) {
-                    self.manager.say(options.say,options.cachable!==false,finishOff);
-                } else finishOff();
+                if (typeof(options.play)=='string' && options.play.length) {
+                    self.manager.play(options.play,function(){
+                        if (typeof(options.say)=='string' && options.say.length) {
+                            self.manager.say(options.say,options.cachable!==false,finishOff);
+                        } else finishOff();
+                    })
+                } else {
+                    if (typeof(options.say)=='string' && options.say.length) {
+                        self.manager.say(options.say,options.cachable!==false,finishOff);
+                    } else finishOff();
+                }
             };
-            
+
             // run any automaticMatchProcessors
             for (let suffix in automaticMatchProcessors) {
                 for (let key in result.textMatchData) {
-                    if (key.indexOf(suffix)==key.length-suffix.length) {
+                    let index = key.indexOf(suffix);
+                    if (index>=0 && index==key.length-suffix.length) {
                         result.textMatchData[key] = automaticMatchProcessors[suffix](result.textMatchData[key]);
                     }
                 }
@@ -371,14 +426,19 @@ Assistant.prototype.heard = function( utterance ) {
             let handlerResult = result.handler( result.textMatchData, this, processHandlerResult );
             if (typeof(handlerResult)=='object' || typeof(handlerResult)=='string') processHandlerResult(handlerResult);
             else {
-                // if the handler doesn't return an object that means it wants to call the callback we passed it instead
+                // if the handler doesn't return an object or a string that means it wants to call the callback we passed it instead
                 // but set a timeout just in case they don't
-                safetyTimeout = setTimeout(function(){
-                    console.log('Handler didn\'t respond in time - running safety handler');
-                    processHandlerResult({
-                        say: 'Hmm... looks like something went wrong. Sorry!'
-                    });
-                },15000);
+                
+                // HOWEVER if the handler has already synchronously called the processHandler calback then there is no need to set a safety timeout
+                // We know if this is the case by checking if safetyTimeout===0;
+                if (safetyTimeout!==0) {
+                    safetyTimeout = setTimeout(function(){
+                        console.log('Handler didn\'t respond in time - running safety handler');
+                        processHandlerResult({
+                            say: 'Hmm... looks like something went wrong. Sorry!'
+                        });
+                    },3000);
+                }
             }
             
             return true;
@@ -401,7 +461,7 @@ let durationParts = {
     minute : 60,
     second : 1
 }
-Assistant.prototype.describeDuration = function( s ) {
+Assistant.prototype.describeDuration = function( s, alwaysEndInS=false ) {
     let parts=[];
     for( let part in durationParts ) {
         let p = Math.floor(s/durationParts[part]);
@@ -412,7 +472,10 @@ Assistant.prototype.describeDuration = function( s ) {
         }
     }
     
-    return this.englishJoin(parts)
+    let durationWords = this.englishJoin(parts)
+    if (alwaysEndInS===-1) durationWords = durationWords.replace(/(day|minute|hour|second)s/g,'$1');
+    if (alwaysEndInS===true) durationWords = durationWords.replace(/(day|minute|hour|second)$/g,'$1s');
+    return durationWords;
 }
 
 Assistant.prototype.englishJoin = function( list, separator=',' ) {

@@ -1,26 +1,31 @@
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-    
+
+var manager;
+
 function audioPlayer(  ) {
     this.startPlayer();
     this.buffer = '';
-    this.playing = false;
+    this.interupted = 0;
+    this.status = 'stopped';
     this.playlist = [];
+    this.name = 'local';
 }
 
 audioPlayer.prototype.startPlayer = function() {
     var self = this;
     
 	console.log('Starting up local audio player');
-	this.process = spawn('mplayer',['-slave','-quiet','-pausing','2','-nolirc','-nomouseinput','-idle']);
+	this.process = spawn('mplayer',['-slave','-quiet','-pausing','2','-nolirc','-nomouseinput','-idle','-volume','100']);
 
     var justStarted = true;
 	this.process.stdout.on('data',function(data){
 		console.log('Output from mplayer: '+data.toString().trim());
 
         if (justStarted) {
+            // Tell Mplayer to play at full volume
             self.setVolume(50);
         }
         justStarted=false;
@@ -56,7 +61,18 @@ audioPlayer.prototype.sendCommand = function( command ) {
 }
 
 audioPlayer.prototype.setVolume = function( percent ) {
-    this.sendCommand('volume '+percent+' 1');
+    // Don't change the mplayer volume
+    //this.sendCommand('volume '+percent+' 1');
+
+    // Use the master volume control instead
+    let cmd = "pactl set-sink-volume @DEFAULT_SINK@ "+parseInt(percent)+"%";
+    console.log("Running: "+cmd);
+    exec(cmd, (error, stdout, stderr) => {
+        if (error) console.log(`pactl error: ${error.message}`);
+        if (stderr) console.log(`pactl stderr: ${stderr}`);
+        if (stdout) console.log(`pactl stdout: ${stdout}`);
+    });
+
     this.volume=percent;
 }
 
@@ -74,15 +90,18 @@ audioPlayer.prototype.decreaseVolume = function( percent=10 ) {
 
 audioPlayer.prototype.nowPlaying = function( callback ) {
     var self = this;
+    if (this.status=='stopped') return callback( false );
     this.getResponse( function(line){
         self.surpressNextError=false;
-        if (line=='ANS_ERROR=PROPERTY_UNAVAILABLE') return callback( '' );
+        if (line=='ANS_ERROR=PROPERTY_UNAVAILABLE') {
+            this.status=='stopped'
+            return callback( '' );
+        }
         if (line.substring(0,9)!='ANS_path=') return callback( false );
         line=line.substring(9);
-        console.log(line);
         for( let i=0; i<self.playlist.length; i++ ) {
-            if (line==self.playlist[i].filename) {
-                return callback( self.playlist[i] );
+            if (line==self.playlist[i].url) {
+                return callback( self.playlist[i], i );
             }
         }
         console.log("Couldn't find current playing file in the playlist");
@@ -92,16 +111,38 @@ audioPlayer.prototype.nowPlaying = function( callback ) {
     this.sendCommand('get_property path');
 }
 
+audioPlayer.prototype.interupt = function() {
+    if (this.status=='playing' && !this.interupted ) this.pause();
+    this.interupted++;
+}
+
+audioPlayer.prototype.resume = function() {
+    this.interupted--;
+    if (!this.interupted) {
+        if (this.status=='playing') this.play();
+    }
+}
+
+// This tells the manager/tasks the status of the player. It returns "playing" "paused" or "stopped"
+// This ignores the interuption status, so if the music has been interrupted (so is not actually playing) it will still return "playing"
+audioPlayer.prototype.getStatus = function() {
+    return this.status;
+}
+
 audioPlayer.prototype.play = function() {
-    if (this.playing) return;
-    this.playing=true;
+    if (this.status=='playing') return false;
+    this.status='playing';
+    if (this.interupted) return false;
     this.sendCommand('pause');
+    return true;
 }
 
 audioPlayer.prototype.pause = function() {
-    if (!this.playing) return;
-    this.playing=false;
+    if (this.status!='playing') return false;
+    this.status='paused';
+    if (this.interupted) return false;
     this.sendCommand('pause');
+    return true;
 }
 
 audioPlayer.prototype.next = function() {
@@ -113,7 +154,7 @@ audioPlayer.prototype.previous = function() {
 }
 
 audioPlayer.prototype.makeTemporaryPlaylist = function( tracks ) {
-    let trackList = tracks.map( track => track.filename ).join("\n");
+    let trackList = tracks.map( track => track.url ).join("\n");
     
     if (!trackList.length) return false;
     
@@ -122,12 +163,13 @@ audioPlayer.prototype.makeTemporaryPlaylist = function( tracks ) {
     const tempDir = fs.mkdtempSync(tempPath)
     const tempFile = tempDir+'/playlist.m3u8';
     console.log('Create temporary playlist: '+tempFile);
+    console.log(trackList);
     fs.writeFileSync(tempFile, trackList);
     
     setTimeout(function() {
         console.log('Deleted temporary playlist: '+tempFile);
-        fs.unlinkSync(tempFile);
-        fs.rmdirSync(tempDir);
+        //fs.unlinkSync(tempFile);
+        //fs.rmdirSync(tempDir);
     },1000);
     return tempFile;
 }
@@ -154,4 +196,4 @@ process.on('exit', (code) => {
     player.shutdown();
 });
 
-module.exports = { 'local': player };
+module.exports = { passRegisterCallback : function( callback, theManager ) { manager = theManager; callback( player,'local') } };

@@ -55,6 +55,16 @@
  */
 
 {
+    // IP address of this machine. This is used in various place e.g. to server audio files for access by Chromecast devices
+    // If this isn't set the code will try and determine the best IP to use automatically
+    //
+    // "myIP"                   : "10.0.0.10"
+    //
+    // Some things scan the network to find devices so these need to know the size of the network block
+    // This is expressed as a CIDR netmask i.e. 24 => /24 => 256 addresses
+    // If this isn't set the code will try and determine it automatically
+    // "netMask"           : 24
+
     "baseDirectory"             : "~/.GPM",
     
     // Using Google's speech to text, or text to speech requires having a credentials file
@@ -64,5 +74,8 @@
     // This takes the form of an array containing the command to run followed by any arguments
     "ttsEngine"                 : ['python3','tts/googleTts.py'],
     "ttsCacheDirectory"         : "<<baseDirectory>>/ttsCache",
-    "ttsCacheSize"              : 10485760, # 10MB of cached tts audio
+    "ttsCacheSize"              : 10485760, // 10MB of cached tts audio
+    
+    // Port to serve audio files on.
+    //      httpFileServerPort    : 8888
 }

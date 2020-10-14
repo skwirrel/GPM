@@ -1,0 +1,55 @@
+{
+    radioStations : {
+        'radio express'     : {
+            url             : 'https://stream.expres.sk/128.mp3',
+            artist          : 'Radio Express',
+            title           : 'Radio Express',
+        },
+        'bbc radio 1'       : {
+            url             : 'http://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/hls/uk/sbr_high/ak/bbc_radio_one.m3u8',
+            artist          : 'The BBC',
+            title           : 'Radio 1',
+        },
+        'bbc radio 2'       : {
+            url             : 'http://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/hls/uk/sbr_high/ak/bbc_radio_two.m3u8',
+            artist          : 'The BBC',
+            title           : 'Radio 2',
+        },
+        'bbc radio 3'       : {
+            url             : 'http://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/hls/uk/sbr_high/ak/bbc_radio_three.m3u8',
+            artist          : 'The BBC',
+            title           : 'Radio 3',
+        },
+        'bbc radio 4 extra' : {
+            url             : 'http://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/hls/uk/sbr_high/ak/bbc_radio_four_extra.m3u8',
+            artist          : 'The BBC',
+            title           : 'Radio 4 extra',
+        },
+        'bbc radio 4'       : {
+            url             : 'http://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/hls/uk/sbr_high/ak/bbc_radio_fourfm.m3u8',
+            artist          : 'The BBC',
+            title           : 'Radio 4',
+        },
+        'bbc radio 5 live'  : {
+            url             : 'http://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/hls/uk/sbr_high/ak/bbc_radio_five_live.m3u8',
+            artist          : 'The BBC',
+            title           : '5 live',
+        },
+        'bbc radio 6 music' : {
+            url             : 'http://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/hls/uk/sbr_high/ak/bbc_6music.m3u8',
+            artist          : 'The BBC',
+            title           : '6 music',
+        },
+        'radio 1'           : 'bbc radio 1',
+        'radio 2'           : 'bbc radio 2',
+        'radio 3'           : 'bbc radio 3',
+        'radio 4'           : 'bbc radio 4',
+        'radio 4 extra'     : 'bbc radio 4 extra',
+        'bbc radio 5'       : 'bbc radio 5 live',
+        'radio 5 live'      : 'bbc radio 5 live',
+        'radio 5'           : 'bbc radio 5 live',
+        'bbc radio 6'       : 'bbc radio 6 music',
+        'radio 6 music'     : 'bbc radio 6 music',
+        'radio 6'           : 'bbc radio 6 music',
+    }
+}
