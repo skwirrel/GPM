@@ -4,6 +4,7 @@ const config = require('../../../../configLoader.js')({
     audioscrobblerMaxCacheAge           : 100,
     playlistMaxExtraTracksPerArtist     : 10,
     playlistYearsEitherSide             : 5,
+    playlistMaxTracks                   : 100,
 });
 
 const yearsEitherSide = parseInt(config.playlistYearsEitherSide);
@@ -171,7 +172,8 @@ function getSimilar(mbid,callback) {
     });
     const url = audioscrobblerBaseUrl + queryString;
     downloadPage(url,function(tracks){
-        if (!tracks || !tracks.similartracks || !tracks.similartracks.track) callback('No tracks returned',[]);
+        console.log(url);
+        if (!tracks || !tracks.similartracks || !tracks.similartracks.track) callback(false,[]);
         else callback(false,tracks.similartracks.track);
     });
 }
@@ -208,7 +210,7 @@ function makePlaylist( type, searchTerm, callback ) {
     let message;
     
     let result;
-    if (type=='anything') [result] = lookups.artist[Math.floor(Math.random()*(lookups.artist.length-0.001))];
+    if (type=='anything') result = lookups.artist[Math.floor(Math.random()*(lookups.artist.length-0.001))];
     else [result,type] = fuzzyLookup(type.toLowerCase(),searchTerm);
 
     if (!result) {
@@ -352,14 +354,17 @@ function processQueue() {
         makePlaylist( type, searchTerm, function(message,requestedTracks,extraTracks){
             process.stdout.write(message+"\n");
             let output = [];
+            let count = 0;
             if (requestedTracks) {
                 for( id in requestedTracks) {
+                    if (count++>config.playlistMaxTracks) break;
                     requestedTracks[id].path = requestedTracks[id].path.toString();
                     output.push(requestedTracks[id]);
                 }
             }
             if (extraTracks) {
                 for( id in extraTracks) {
+                    if (count++>config.playlistMaxTracks) break;
                     extraTracks[id].path = extraTracks[id].path.toString();
                     output.push(extraTracks[id])
                 }

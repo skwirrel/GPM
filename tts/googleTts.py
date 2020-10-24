@@ -59,17 +59,25 @@ tidyCache.cachedFiles = [ str(file) for file in sorted(pathlib.Path(cacheDir).it
 tidyCache.cacheSize = sum([ os.path.getsize(file) for file in tidyCache.cachedFiles ]);
 
 def getSpeech( line, cacheFile=None ):
-    global ttsClient
-    
+    # Instantiate the Google TTS client, voice and encoding
+    ttsClient = texttospeech.TextToSpeechClient()
+    voice = texttospeech.VoiceSelectionParams(
+            language_code='en-UK',
+            ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL)
+    audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3)
+
     # Set the text input to be synthesized
     synthesis_input = texttospeech.SynthesisInput(text=line)
 
     # Perform the text-to-speech request on the text input with the selected
     # voice parameters and audio file type
-    response = getSpeech.ttsClient.synthesize_speech(
+    sys.stderr.write("About to send text to Google\n");    
+    response = ttsClient.synthesize_speech(
         input=synthesis_input,
-        voice=getSpeech.voice,
-        audio_config=getSpeech.audio_config)
+        voice=voice,
+        audio_config=audio_config)
+    sys.stderr.write("Done\n");    
 
     if cacheFile is not None:
         # print('Writing speech to '+cacheFile);
@@ -81,26 +89,20 @@ def getSpeech( line, cacheFile=None ):
         play( cacheFile );
     else:
         # Open a pipe to play the file directly
-        fh = play();
+        sox = play();
+        fh = sox.stdin;
         # Write the response to the pipe
         fh.write(response.audio_content)
         fh.close();
+        sox.wait();
 
-# Instantiate the Google TTS client, voice and encoding
-
-getSpeech.ttsClient = texttospeech.TextToSpeechClient()
-getSpeech.voice = texttospeech.VoiceSelectionParams(
-        language_code='en-UK',
-        ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL)
-getSpeech.audio_config = texttospeech.AudioConfig(
-        audio_encoding=texttospeech.AudioEncoding.MP3)
 
 def play( *file ):
     if len(file)==0:
         sox = subprocess.Popen(["play", "-q", "-t", "mp3", "-"], stdin=subprocess.PIPE, stderr=subprocess.PIPE)
-        return sox.stdin
+        return sox
     else:
-        file = file[0];
+        file = file[0]
         sox = subprocess.call(["play", "-q", file],stderr=subprocess.DEVNULL)
 
 while True:

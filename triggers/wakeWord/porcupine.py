@@ -35,7 +35,7 @@ keywords=["porcupine","americano"]
 try:
     porcupine = pvporcupine.create(
         keywords=keywords,
-        sensitivities=[0.7,0.7])
+        sensitivities=[0.95,0.95])
 
     with noalsaerr():
         pa = pyaudio.PyAudio()
@@ -65,6 +65,7 @@ try:
         if keyword_index >= 0:
             sys.stdout.write(keywords[keyword_index]+"\n");
             sys.stdout.flush();
+            break
 
 finally:
     if porcupine is not None:

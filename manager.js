@@ -33,7 +33,7 @@ if (config.myIP) {
     }
 }
 
-const { spawn } = require('child_process');
+const { exec, spawn } = require('child_process');
 const fs = require('fs');
 const deviceFinder = require('./deviceFinder.js');
 const httpFileServer = require('./httpFileServer.js');
@@ -83,30 +83,48 @@ Manager.prototype.startTts = function() {
             // So kill ourselves instead
             process.kill( process.pid, 'SIGTERM' );
         } else {
+            console.log('Restarting TTS');
             self.startTts();
         }
     });
 }
 
+Manager.prototype.interuptAudio = function() {
+    let localPlayer = this.audioPlayers.local;
+    if (localPlayer) localPlayer.interupt();
+    return function(){
+        if (localPlayer) setTimeout(function(){localPlayer.resume();},500);
+    };
+}
+
 Manager.prototype.say = function( utterance, chachable, callback ) {
-	this.sayCallbackStack.push(callback);
+    let resume = this.interuptAudio();
+
+	this.sayCallbackStack.push(function(){
+        resume();
+        if (typeof(callback)=='function') callback();
+    });
 
 	chachable = chachable ? 'cache':'nocache';
 	
 	console.log('Saying: '+utterance);
+    console.log(chachable+':'+utterance+"\n");
 	this.tts.stdin.write( chachable+':'+utterance+"\n" );
 }
 
 // Plays a file - returns a function which can be called to stop the audio playback
 Manager.prototype.play = function( file, callback, repeat=1  ) {
     console.log('Playing audio: '+file);
-    let args = [file];
+    let resume = this.interuptAudio();
+    let args = ['-v',2,file];
     if (repeat>1) args.push('repeat',repeat);
     let child = spawn('/usr/bin/play', args);
     
-    if (callback) {
-        child.on('exit',callback);
-    }
+    child.on('exit',function(){
+        resume();
+        if (callback) callback();
+    });
+
     return function(){
         child.kill( 'SIGINT' );
     }
@@ -129,6 +147,7 @@ Manager.prototype.processQueue = function( justFinishedPreviousJob ) {
 	
 	let taskArguments = this.queue.shift();
     let task = taskArguments.shift();
+    let onComplete = taskArguments.shift();
 	
 	if (typeof(this.tasks[task])=='undefined') return false;
 	this.busy++;
@@ -139,6 +158,7 @@ Manager.prototype.processQueue = function( justFinishedPreviousJob ) {
 		setTimeout( function(){self.processQueue()}, Math.random(100) );
 	} else {
 		this.running = task;
+        this.onComplete = onComplete;
         // if one job is running straight after another add a slight pause inbetween
         setTimeout(function(){ self.tasks[task].run.apply( self.tasks[task],taskArguments ); },justFinishedPreviousJob?500:0);
 	}
@@ -146,6 +166,7 @@ Manager.prototype.processQueue = function( justFinishedPreviousJob ) {
 
 Manager.prototype.done = function() {
 	console.log('Finished running: '+this.running);
+    if (typeof(this.onComplete)=='function') this.onComplete();
 	this.busy--;
 	this.running = '';
 	this.processQueue(true);
@@ -157,13 +178,28 @@ Manager.prototype.register = function(type, thing, name) {
     console.log('Registering new '+type+': '+name);
 }
 
-Manager.prototype.trigger = function( trigger, data ) {
+Manager.prototype.trigger = function( trigger, data, callback ) {
     trigger = trigger.toLowerCase().trim();
     
+    let toEnqueue = [];
     for( let task in this.tasks ) {
         if (this.tasks[task].offerTrigger( trigger, data )) {
-            this.enqueueTask( task, trigger, data );
+            toEnqueue.push( task );
         }
+    }
+
+    if (!toEnqueue.length) return;
+
+    let tasksToWaitFor=toEnqueue.length;
+
+    let onComplete = function(){
+        tasksToWaitFor--;
+        if (tasksToWaitFor==0 && typeof(callback)=='function') callback();
+    }
+
+    for( let task of toEnqueue ) {
+        console.log('Enqueueing task:'+task);
+        this.enqueueTask( task, onComplete, trigger, data );
     }
 }
 
@@ -258,6 +294,20 @@ mapSubdirectories('./audioPlayers/',loadObject,'audioPlayer');
 mapSubdirectories('./devices/',loadObject,'device');
 
 spawn('/usr/bin/play', ['sounds/ready.mp3']);
+
+// WiFi on Raspberry Pi can timeout periodically if we don't keep it alive
+// See https://www.raspberrypi.org/forums/viewtopic.php?f=36&t=234058&p=1432916#p1432916
+setInterval(function() {
+    console.log('Scanning WiFi to keep it alive');
+
+    let cmd = 'wpa_cli -i wlan0 scan';
+    exec(cmd, (error, stdout, stderr) => {
+        if (error) console.log(`wpa_cli error: ${error.message}`);
+        if (stderr) console.log(`wpa_cli stderr: ${stderr}`);
+        if (stdout) console.log(`wpa_cli stdout: ${stdout}`);
+    });
+
+},120*1000);
 
 setTimeout(function() {
     console.log('Setup phase complete\n===================================\n');

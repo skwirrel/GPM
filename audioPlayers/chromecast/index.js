@@ -78,7 +78,7 @@ audioPlayer.prototype.launch = function() {
             }
             self.setVolume(50);
             
-            console.log('Chromecast Media Player running on %s',this.name);
+            console.log('Chromecast Media Player running on %s',self.name);
 
             self.player = player;
             // see if we have queued actions
@@ -131,7 +131,10 @@ audioPlayer.prototype.play = function() {
     if (this.status=='playing') return false;
     this.status='playing';
     if (this.interupted) return false;
+    let self = this;
     this.playerAction(function(player){
+        console.log('Starting Chromecast playback on '+self.name);
+        console.log(player);
         player.play();
     });
     return true;

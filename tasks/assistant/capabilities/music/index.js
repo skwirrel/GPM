@@ -1,6 +1,5 @@
 const config = require('../../../../configLoader.js')({},__filename);
 
-console.log(config);
 const { spawn } = require('child_process');
 
 console.log('Starting playlist maker');
@@ -129,7 +128,7 @@ function playMusic( matchDetails, assistant, callback ) {
 }
 
 let phrasebook = {
-    'onDevice' : '[in|on|of] [the] (player:<stuff>) [|speaker|chromecast]'
+    'onDevice' : '[in|on] [the] (player:<stuff>) [|speaker|chromecast]'
 };
 
 let capabilities = [
@@ -158,7 +157,8 @@ let capabilities = [
         }
     },{
         incantations    : [
-            '[play [me] the] next [|track|song] [$onDevice]',
+            '[play [me] the] (direction:[next|previous]) [|track|song] [$onDevice]',
+            '(direction:back)',
         ],
         handler         : function(matchDetails, assistant, callback ) {
             let player = assistant.manager.findAudioPlayer(matchDetails.player);
@@ -274,6 +274,7 @@ let capabilities = [
     },{
         incantations    : [
             '[whats|what is] playing [now] [$onDevice [now]]',
+            'whats this [playing [now]] [$onDevice [now]]',
         ],
         handler         : function(matchDetails, assistant, callback ) {
             let respond = function( nowPlaying ) {

@@ -174,6 +174,7 @@ function Assistant( manager ) {
     this.artificialUtterances = false;
     this.onNextWakeActions = [];
     this.contextHandlesStop = false;
+    this.resumeAudio=false;
 }
 
 Assistant.prototype.spawnListener = function() {
@@ -261,13 +262,17 @@ Assistant.prototype.run = function( trigger, data ) {
 
 Assistant.prototype.listen = function( ) {
     this.listening = true;
-    if (this.artificialUtterances!==false) {
+    if (typeof(this.artificialUtterances)!='undefined' && this.artificialUtterances!==false) {
         if (this.artificialUtterances.length) this.heard( this.artificialUtterances.shift() );
         else this.heard('<timeout>');
     } else {
-        let result = this.listener.stdin.write("listen\n");
-        if (!result) console.log('Problem listening');
-        else console.log('Assistant is listening');
+        let self = this;
+        setTimeout(function(){
+            self.resumeAudio = self.manager.interuptAudio();
+            let result = self.listener.stdin.write("listen\n");
+            if (!result) console.log('Problem listening');
+            else console.log('Assistant is listening');
+        },500);
     }
 }
 
@@ -288,6 +293,8 @@ Assistant.prototype.heard = function( utterance ) {
     var self = this;
     this.listening = false;
     console.log('Assistant heard: ',utterance);
+    if (this.resumeAudio) this.resumeAudio();
+    this.resumeAudio=false;
     
     // Remove punctuation etc
     utterance = utterance.toLowerCase().replace(/[^a-z0-9% ]+/g,'');
@@ -396,7 +403,9 @@ Assistant.prototype.heard = function( utterance ) {
                         console.log('handler told us to stop listening');
                         self.done();
                     } else {
-                        self.listen();
+                        // Decided not to keep listening
+                        // self.listen();
+                        self.done();
                     }
                 };
                 
@@ -437,7 +446,7 @@ Assistant.prototype.heard = function( utterance ) {
                         processHandlerResult({
                             say: 'Hmm... looks like something went wrong. Sorry!'
                         });
-                    },3000);
+                    },15000);
                 }
             }
             
@@ -446,7 +455,7 @@ Assistant.prototype.heard = function( utterance ) {
     }
 
 	// Didn't recognize the utterance - or no handler defined
-    this.manager.say('Sorry. I don\'t understand.',true,function(){ self.listen(); });
+    this.manager.say('Sorry. I don\'t understand.',true,function(){ self.done(); });
     return false;    
 }
 

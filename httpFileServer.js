@@ -85,7 +85,7 @@ httpFileServer.prototype.serveFile = function( filename ) {
         filename,
         new Date().getTime()
     ];
-    console.log('Added new file to web server file store. This now contains %d files',Object.keys(fileMap).length);
+    // console.log('Added new file to web server file store. This now contains %d files',Object.keys(fileMap).length);
     return 'http://'+global.myIp+':'+port+'/'+id;
 }
 

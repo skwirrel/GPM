@@ -18,7 +18,7 @@ audioPlayer.prototype.startPlayer = function() {
     var self = this;
     
 	console.log('Starting up local audio player');
-	this.process = spawn('mplayer',['-slave','-quiet','-pausing','2','-nolirc','-nomouseinput','-idle','-volume','100']);
+	this.process = spawn('mplayer',['-slave','-quiet','-pausing','2','-nolirc','-nomouseinput','-idle','-volume','50']);
 
     var justStarted = true;
 	this.process.stdout.on('data',function(data){
@@ -27,6 +27,7 @@ audioPlayer.prototype.startPlayer = function() {
         if (justStarted) {
             // Tell Mplayer to play at full volume
             self.setVolume(50);
+             
         }
         justStarted=false;
 
@@ -112,14 +113,18 @@ audioPlayer.prototype.nowPlaying = function( callback ) {
 }
 
 audioPlayer.prototype.interupt = function() {
-    if (this.status=='playing' && !this.interupted ) this.pause();
     this.interupted++;
+    console.log('Interupting local audio playback');
+    if (this.interupted==1 && this.status=='playing') {
+        this.sendCommand('pause');
+    }
 }
 
 audioPlayer.prototype.resume = function() {
     this.interupted--;
-    if (!this.interupted) {
-        if (this.status=='playing') this.play();
+    console.log('Resuming local audio playback');
+    if (this.interupted==0 && this.status=='playing') {
+        this.sendCommand('pause');
     }
 }
 
