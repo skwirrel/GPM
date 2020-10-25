@@ -231,7 +231,7 @@ function makePlaylist( type, searchTerm, callback ) {
             tracks = getRows('SELECT id, title, path, album, artist, mb_artistid, mb_trackid FROM items WHERE album=? ORDER BY disc,track',false,result.album);
             emptyMessage = 'Couldn\'t find the album: '+searchTerm;
             message = 'Playing the album: "'+searchTerm+'"';
-    } else if (type == 'anything') {
+        } else if (type == 'anything') {
             // pick an artist at random
             message = 'Playing some music';
             tracks = getRows('SELECT id, title, path, album, artist, mb_artistid, mb_trackid FROM items WHERE artist=? ORDER BY RANDOM() LIMIT 1',false,result.artist);

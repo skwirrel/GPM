@@ -141,7 +141,7 @@ let capabilities = [
         incantations    : [
             '$delayStart play [me] (anything:[[|some|any] music|anything]) [$onDevice] $delayStart',
             '$delayStart play [me] [[[a] track[s]|[some] music|something] [by|from] [the [artist|band|musician|composer]]|some] (artist:<stuff>) [$onDevice] $delayStart',
-            '$delayStart play [me] the album (album:<stuff>)] [$onDevice] $delayStart',
+            '$delayStart play [me] the album (album:<stuff>) [$onDevice] $delayStart',
             '$delayStart play [me] [the] [track|song] (track:<stuff>) [$onDevice] $delayStart',
             '$delayStart play [me] (something:<stuff>) [$onDevice] $delayStart',
         ],
@@ -184,8 +184,8 @@ let capabilities = [
                     
             }
 
-            assistant.manager.audioPlayer(players[0],matchDetails.direction);
-            return;
+            assistant.manager.audioPlayer(player,matchDetails.direction);
+            return {};
         }
     },{
         incantations    : [
@@ -295,7 +295,7 @@ let capabilities = [
     },{
         incantations    : [
             '[whats|what is] playing [now] [$onDevice [now]]',
-            'whats this [playing [now]] [$onDevice [now]]',
+            '[whats|what is] this [playing [now]] [$onDevice [now]]',
         ],
         handler         : function(matchDetails, assistant, callback ) {
             let respond = function( nowPlaying ) {

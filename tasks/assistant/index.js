@@ -116,7 +116,7 @@ function convertDuration(duration) {
     return total;
 }
 
-const timeRegexp = /^(\d{1,2}?|midday|midnight):?(\d{2})?\s*(am|pm)?\s*(today|tomorrow)?/;
+const timeRegexp = /^(\d{1,2}?|midday|midnight):?(\d{2})?\s*(am|pm)?\s*(today|tomorrow)?\s*$/;
 function convertTime(time) {
     let results = time.match( timeRegexp );
     console.log(results);
