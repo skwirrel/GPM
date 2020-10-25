@@ -37,7 +37,7 @@ const handlers = {
 			// See if there is a substitution defined at the start
 			let substituteText = null;
 			if (position=='start') {
-				let matches = substr.match(/^([0-9a-zA-Z_-]*)\s*:\s*/);
+				let matches = substr.match(/^([0-9a-zA-Z_-]+)\s*:\s*/);
 				if ( matches ) {
 					substituteText = matches[1];
 					substr = substr.substring(matches[0].length);

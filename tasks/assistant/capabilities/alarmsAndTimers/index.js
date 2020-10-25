@@ -1,8 +1,10 @@
 var alarmDescription = false;
 
 var pastAlarms = [];
-var futureTimers = [];
-var futureAlarms = [];
+var future = {
+    timers : [],
+    alarms : []
+};
 var goingOff = false;
 
 function timerList( assistant, future ) {
@@ -14,30 +16,30 @@ function cancelTimer( matchDetails, assistant, callback ) {
     let response = '';
     let newContext = '';
     do {
-        if (futureTimers.length==0) {
+        if (future.timers.length==0) {
             response = 'There aren\'t any timers running at the moment';
             break;
         }
 
         // handle requests to cancel all timers
         if (matchDetails.all) {
-            if (futureTimers.length>1) response = 'OK. I\'ve cancelled all the timers that were running';
+            if (future.timers.length>1) response = 'OK. I\'ve cancelled all the timers that were running';
             else response = 'OK. I\'ve cancelled the timer that was running';
-            for( let i=0; i<futureTimers.length; i++ ) {
-                clearTimeout( futureTimers[i].timeout );
+            for( let i=0; i<future.timers.length; i++ ) {
+                clearTimeout( future.timers[i].timeout );
             }
-            futureTimers = [];
+            future.timers = [];
             break;
         }
         
         // handle requests to cancel a timer by name
         if (matchDetails.name) {
-            let namedTimers = futureTimers.filter(timer=>timer.name.length);
+            let namedTimers = future.timers.filter(timer=>timer.name.length);
             if (!namedTimers.length) {
-                response = 'You don\'t have any named timers running at the moment but you do have: '+timerList( assistant, futureTimers );
+                response = 'You don\'t have any named timers running at the moment but you do have: '+timerList( assistant, future.timers );
                 break;
             }
-            let match = futureTimers.filter(timer=>timer.name===matchDetails.name);
+            let match = future.timers.filter(timer=>timer.name===matchDetails.name);
             if (match.length) {
                 toCancel=match[0];
                 break;
@@ -50,23 +52,23 @@ function cancelTimer( matchDetails, assistant, callback ) {
         // handle requests to cancel a timer duration
         // This doesn't require an exact match - it just picks the one with the closest duration
         if (matchDetails.timerDuration) {
-            let sortedTimers = futureTimers.sort( (a,b) => Math.abs(a.duration-matchDetails.timerDuration) - Math.abs(b.duration-matchDetails.timerDuration) );
+            let sortedTimers = future.timers.sort( (a,b) => Math.abs(a.duration-matchDetails.timerDuration) - Math.abs(b.duration-matchDetails.timerDuration) );
             toCancel = sortedTimers[0];
             break;
         }
         // handle requests to cancel an unspecified timer
-        if (futureTimers.length==1) {
-            toCancel = futureTimers[0];
+        if (future.timers.length==1) {
+            toCancel = future.timers[0];
             break;
         }
         // They din't specify which one to cancel, but there are several set - so we need them to clarify
-        response = 'You have '+futureTimers.length+' timers running right now: '+timerList( assistant, futureTimers );
+        response = 'You have '+future.timers.length+' timers running right now: '+timerList( assistant, future.timers );
         response += '. Which of these would you like to cancel?';
         newContext = 'alarmsAndTimers/whichTimerToCancel';
     } while(false);
     if (toCancel) {
         clearTimeout(toCancel.timeout);
-        futureTimers = futureTimers.filter(entry=>entry!=toCancel);
+        future.timers = future.timers.filter(entry=>entry!=toCancel);
         response = 'OK. I\'ve cancelled your '+toCancel.description;
     }
     return {
@@ -80,19 +82,31 @@ let capabilities = [
     {
         context         : 'main',
         incantations    : [
-            'set a[n] (type:[alarm|timer]) for (timerDuration:$daysDuration) [|from now|time] [[called|for] (name:<stuff>)]',
+            'set a[|n|nother] (type:[alarm|timer]) for (timerDuration:$daysDuration) [|from now|time] [[called|for] (name:<stuff>)]',
             'set a (timerDuration:$daysDuration) (type:[timer|alarm]) [[called|for] (name:<stuff>)]',
+            'set an[other] (type:alarm) for (alarmTime:$timeOfDay) [[called|for] (name:<stuff>)]',
         ],
         handler         : function( matchDetails, assistant, callback ) {
-            let duration = matchDetails.timerDuration;
-            let durationWords = assistant.describeDuration(duration,-1);
+            let duration, description, response;
+            let now = new Date().getTime();
+            
+            if (matchDetails.type=='timer') {
+                duration = matchDetails.timerDuration;
+                description = assistant.describeDuration(duration,-1)+' timer';
+                
+                response = 'OK. '+description+' started';
+            } else {
+                if (matchDetails.hasOwnProperty('alarmTime')) duration = matchDetails.alarmTime - now/1000;
+                else duration = matchDetails.timerDuration;
+                console.log(matchDetails.alarmTime);
+                description = assistant.describeTime( now + duration*1000 )+' alarm';
+                response = 'OK. Alarm set for '+assistant.describeTime( now + duration*1000 );
+            }
             
             let name = matchDetails.hasOwnProperty('name') ? matchDetails.name : '';
 
-            let description = durationWords+' timer';
             if (name) description += ' called "'+name+'"';
 
-            let now = new Date().getTime();
             let timerDetails = {
                 time        : now + duration*1000,
                 createTime  : now,
@@ -103,14 +117,14 @@ let capabilities = [
                     pastAlarms.unshift(timerDetails);
                     // keep the list of past alarms down to the last 10
                     if (pastAlarms.length>10) pastAlarms.pop();
-                    futureTimers = futureTimers.filter(entry=>entry!=timerDetails);
-                    assistant.manager.enqueueTask('assistant','assistant','sound the alarm');
+                    future[matchDetails.type+'s'] = future[matchDetails.type+'s'].filter(entry=>entry!=timerDetails);
+                    assistant.manager.enqueueTask('assistant',false,'assistant','sound the alarm');
                     goingOff = timerDetails;
                 },duration*1000)
             }
-            futureTimers.push(timerDetails);
+            future[matchDetails.type+'s'].push(timerDetails);
 
-            return "OK. "+durationWords+" timer started";
+            return response;
         },
     },{
         context         : 'main',
@@ -129,7 +143,7 @@ let capabilities = [
         },
     },{
         context         : 'main',
-        incantation     : '[tell me] [which|what] [alarm|timer] [was that|that was]',
+        incantation     : '[tell me] [which|what] [|alarm|timer] [was that|that was] [|alarm|timer] [for]',
         handler         : function( matchDetails, assistant, callback ) {
             let now = new Date().getTime();
             if (!pastAlarms.length || (now - pastAlarms[0].time)>3600000) {
@@ -144,13 +158,13 @@ let capabilities = [
             '[tell me] [are|is] [there] any (which:[timer|alarm])s [currently] set [|at th[e|is] moment|[right] now]'
         ],
         handler         : function( matchDetails, assistant, callback ) {
-            let future = matchDetails.which=='alarm' ? futureAlarms:futureTimers;
+            let things = future[matchDetails.which+'s'];
             
-            let response = 'There are '+future.length+' '+matchDetails.which+'s set at the moment';
+            let response = 'There are '+things.length+' '+matchDetails.which+'s set at the moment';
             
-            if (future.length==0) {
+            if (things.length==0) {
                 response = 'There aren\'t any '+matchDetails.which+'s set right now';
-            } else if (!future.length ==1) {
+            } else if (!things.length ==1) {
                 response = 'There is only one '+matchDetails.which+' set right now';
             }
             return response;
@@ -159,15 +173,15 @@ let capabilities = [
         context         : 'main',
         incantation     : '[tell me] [what|which] (which:[timer|alarm])[s] [[do] I [currently] have [set]|have I [currently] [got] [set]|are [there] set] [running] [|at th[e|is] moment|[right] now]',
         handler         : function( matchDetails, assistant, callback ) {
-            let future = matchDetails.which=='alarm' ? futureAlarms:futureTimers;
-            if (!future.length) {
+            let things = future[matchDetails.which+'s'];
+            if (!things.length) {
                 return 'You don\'t have any '+matchDetails.which+'s set at the moment';
             }
-            if (future.length==1) {
-                return 'You have '+assistant.indefiniteArticle(future[0].description)+future[0].description;
+            if (things.length==1) {
+                return 'You have '+assistant.indefiniteArticle(things[0].description)+things[0].description;
             }
             let response = 'You have the following '+matchDetails.which+'s set: ';
-            response += assistant.englishJoin(future.map(entry=>assistant.indefiniteArticle(entry.description)+entry.description),';');
+            response += assistant.englishJoin(things.map(entry=>assistant.indefiniteArticle(entry.description)+entry.description),';');
             return response;
         },
     },{

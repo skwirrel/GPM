@@ -158,13 +158,34 @@ let capabilities = [
     },{
         incantations    : [
             '[play [me] the] (direction:[next|previous]) [|track|song] [$onDevice]',
-            '(direction:back)',
+            '[go] (direction:back) [|a song|to the [last|previos] song]',
         ],
         handler         : function(matchDetails, assistant, callback ) {
-            let player = assistant.manager.findAudioPlayer(matchDetails.player);
-            players = Object.keys(assistant.manager.audioPlayers).sort();
-            response = 'You can stream music to the following devices: '+assistant.englishJoin(players,';');
-            return( response );
+            // if they specified a device then that's easy...
+            let player;
+            if (matchDetails.player) {
+                player = assistant.manager.findAudioPlayer(matchDetails.player);
+                
+                if (player===false) return cantFindPlayerMessage( assistant, matchDetails.player );
+            } else {
+                let players = assistant.manager.activePlayers();
+
+                if (!players.length) {
+                    response = 'I can\'t find any speakers that are currently playing any music';
+                    return( response );
+                } else if (players.length>1) {
+                    response = 'There are multiple speakers playing music at the moment.';
+                    response += 'You can say: "play the next track on '+players[0]+' to tell me which one you\'re referring to.';
+                    response += 'The speakers that are currently playing are: '+assistant.englishJoin(players,';');
+                    return( response );
+                } else {
+                    player = players[0]
+                }
+                    
+            }
+
+            assistant.manager.audioPlayer(players[0],matchDetails.direction);
+            return;
         }
     },{
         incantations    : [

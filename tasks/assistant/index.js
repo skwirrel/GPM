@@ -67,6 +67,9 @@ const phrasebook = {
     minutesDuration : '[$secondsDuration|[[1:a|one]|<number:1>] minute[s] [[and] $secondsDuration]]',
     hoursDuration : '[$minutesDuration|[[1:an|one]|<number:1>] hour[s] [[and] $minutesDuration]]',
     daysDuration : '[$hoursDuration|[[1:a|one]|<number:1>] day[s] [[and] $hoursDuration]]',
+    
+    timeOfDay : '[0][0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|midnight|midday][[0|1|2|3|4|5][0|1|2|3|4|5|6|7|8|9]] [oclock] [|am|pm] [|today|tomorrow]',
+    
     delayStart : '[(ignoreDelay:ignore delay)] [in (delayStartDuration:$daysDuration) [time]]',
     autoStop : '[for (actionDuration:$daysDuration)]',
     
@@ -113,9 +116,35 @@ function convertDuration(duration) {
     return total;
 }
 
+const timeRegexp = /^(\d{1,2}?|midday|midnight):?(\d{2})?\s*(am|pm)?\s*(today|tomorrow)?/;
+function convertTime(time) {
+    let results = time.match( timeRegexp );
+    console.log(results);
+    let hour = results[1];
+    if (hour=='midday') hour=12;
+    if (hour=='midnight') hour=0;
+    hour=parseInt(hour);
+    let minute = results[2]?parseInt(results[2]):0;
+    if (results[3]=='pm' && hour<12) hour+=12;
+    if (hour<10) hour = '0'+hour;
+    if (minute<10) minute = '0'+minute;
+    
+    const now = new Date().getTime();
+    let day,timestamp;
+    if (results[4]=='tomorrow') {
+        day = new Date(now+86400000).toJSON().substr(0,10);
+    } else {
+        day = new Date(now).toJSON().substr(0,10);
+        timestamp = new Date(day+' '+hour+':'+minute).getTime() - now;
+        if (timestamp<0) day = new Date(now+86400000).toJSON().substr(0,10);
+    }
+    return new Date(day+' '+hour+':'+minute).getTime() / 1000;
+}
+    
 automaticMatchProcessors = {
     Duration    : convertDuration,
     Number      : convertNumber,
+    Time        : convertTime,
 }
 
 const contexts = {
@@ -485,6 +514,39 @@ Assistant.prototype.describeDuration = function( s, alwaysEndInS=false ) {
     if (alwaysEndInS===-1) durationWords = durationWords.replace(/(day|minute|hour|second)s/g,'$1');
     if (alwaysEndInS===true) durationWords = durationWords.replace(/(day|minute|hour|second)$/g,'$1s');
     return durationWords;
+}
+
+Assistant.prototype.describeTime = function( time ) {
+    let [hours,mins] = new Date(time).toLocaleTimeString().split(':');
+    hours = parseInt(hours);
+    mins = parseInt(mins);
+    
+    hoursDescription = (hours % 12)+(hours>11?'pm':'am');
+    let extra='';
+    
+    if (time > Math.ceil(new Date()/86400000)*86400000) extra=' tomorrow';
+    
+    if (mins==0) {
+        if (hours==0) return 'midnight';
+        if (hours==12) return 'midday'+extra;
+        return (hours % 12)+(hours>11?'pm':'am')+extra;
+    } else if (mins==15) {
+        if (hours==0) return 'quarter past midnight';
+        return 'quarter past '+hoursDescription+extra;
+    } else if (mins==30) {
+        if (hours==0) return 'half past midnight';
+        return 'half past '+hoursDescription+extra;
+    } else if (mins==45 || mins==40 || mins==50 || mins==55) {
+        hours = (hours+1) % 12;
+        hoursDescription = (hours % 12)+(hours>11?'pm':'am');
+        if (hours==0) return 'quarter to midnight';
+        if (mins=45) return 'quarter to '+hoursDescription+extra;
+        return (60-mins)+' to '+hoursDescription+extra;
+    } else if (hours=0) {
+        return mins+' minutes past midnight';
+    }
+    
+    return hoursDescription+':'+mins+extra;
 }
 
 Assistant.prototype.englishJoin = function( list, separator=',' ) {
