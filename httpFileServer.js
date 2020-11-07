@@ -10,8 +10,10 @@ const port = config.httpFileServerPort || 8888;
 
 function httpFileServer() {
     this.fileMap = {};
-
+    this.handlerMap = {};
+    
     let fileMap = this.fileMap;
+    let handlerMap = this.handlerMap;
     
     // Determine the IP address of this machine
     if (!global.myIp.length) {
@@ -37,7 +39,13 @@ function httpFileServer() {
         let uri = url.parse(request.url).pathname;
         // Take the slash off the front
         uri = uri.substr(1);
-                
+        
+        if (handlerMap.hasOwnProperty(uri)) {
+            console.log('Web server calling handler for '+uri);
+            handlerMap[uri](request,response);
+            return;
+        }
+            
         if (!fileMap.hasOwnProperty(uri)) {
             response.writeHead(404, {"Content-Type": "text/plain"});
             response.write("404 Not Found\n");
@@ -88,6 +96,10 @@ httpFileServer.prototype.serveFile = function( filename ) {
     ];
     // console.log('Added new file to web server file store. This now contains %d files',Object.keys(fileMap).length);
     return 'http://127.0.0.1:'+port+'/'+id;
+}
+
+httpFileServer.prototype.addHandler = function( path, handler ) {
+    this.handlerMap[path] = handler;
 }
 
 module.exports = httpFileServer;

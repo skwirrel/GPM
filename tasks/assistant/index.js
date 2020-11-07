@@ -150,6 +150,8 @@ automaticMatchProcessors = {
 const contexts = {
 }
 
+let capabilityStartupHandlers = [];
+
 // load up all the capabilities
 mapSubdirectories(__dirname+'/capabilities/',function(objectDir, objectName,type){
     if (!fs.existsSync(objectDir+objectName+'/index.js')) return;
@@ -181,6 +183,9 @@ mapSubdirectories(__dirname+'/capabilities/',function(objectDir, objectName,type
             }
         }
     }
+    
+    if (capabilityData.hasOwnProperty('startup')) capabilityStartupHandlers.push( capabilityData.startup );
+
 });
 
 for( let context in contexts ) {
@@ -204,6 +209,11 @@ function Assistant( manager ) {
     this.onNextWakeActions = [];
     this.contextHandlesStop = false;
     this.resumeAudio=false;
+    
+    // Now that we have the manager we can run all the startup handlers for the capabilities
+    while (capabilityStartupHandlers.length) {
+        capabilityStartupHandlers.pop()(manager);
+    }
 }
 
 Assistant.prototype.spawnListener = function() {
@@ -521,7 +531,8 @@ Assistant.prototype.describeTime = function( time ) {
     hours = parseInt(hours);
     mins = parseInt(mins);
     
-    hoursDescription = (hours % 12)+(hours>11?'pm':'am');
+    let hoursDescription = (hours % 12);
+    let ampm = (hours>11?'pm':'am');
     let extra='';
     
     if (time > Math.ceil(new Date()/86400000)*86400000) extra=' tomorrow';
@@ -529,24 +540,24 @@ Assistant.prototype.describeTime = function( time ) {
     if (mins==0) {
         if (hours==0) return 'midnight';
         if (hours==12) return 'midday'+extra;
-        return (hours % 12)+(hours>11?'pm':'am')+extra;
+        return (hours % 12)+ampm+extra;
     } else if (mins==15) {
         if (hours==0) return 'quarter past midnight';
-        return 'quarter past '+hoursDescription+extra;
+        return 'quarter past '+hoursDescription+ampm+extra;
     } else if (mins==30) {
         if (hours==0) return 'half past midnight';
-        return 'half past '+hoursDescription+extra;
+        return 'half past '+hoursDescription+ampm+extra;
     } else if (mins==45 || mins==40 || mins==50 || mins==55) {
         hours = (hours+1) % 12;
-        hoursDescription = (hours % 12)+(hours>11?'pm':'am');
+        ampm = hours>11?'pm':'am';
         if (hours==0) return 'quarter to midnight';
-        if (mins=45) return 'quarter to '+hoursDescription+extra;
-        return (60-mins)+' to '+hoursDescription+extra;
+        if (mins=45) return 'quarter to '+hours+ampm+extra;
+        return (60-mins)+' to '+hours+ampm+extra;
     } else if (hours=0) {
         return mins+' minutes past midnight';
     }
     
-    return hoursDescription+':'+mins+extra;
+    return hoursDescription+':'+mins+ampm+extra;
 }
 
 Assistant.prototype.englishJoin = function( list, separator=',' ) {

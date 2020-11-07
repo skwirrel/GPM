@@ -1,6 +1,8 @@
 const config = require('../../../../configLoader.js')({},__filename);
 
 const { spawn } = require('child_process');
+const fs = require("fs");
+const path = require('path');
 
 console.log('Starting playlist maker');
 
@@ -57,6 +59,22 @@ function describeTrack( track ) {
     return response;
 }
 
+function parseResponse( data ) {
+    let lines = data.split('\n');
+    let response = '';
+    let tracks;
+    for (let i=0; i<lines.length; i++) {
+        if (!lines[i].length) continue;
+        if (lines[i].match(/^\[/)) {
+            tracks = JSON.parse( lines.slice(i).join('\n') );
+            break;
+        }
+        response = lines[i];
+    }
+    
+    return [ response, tracks ];
+}
+
 function playMusic( matchDetails, assistant, callback ) {
 
     console.log(matchDetails);
@@ -97,17 +115,8 @@ function playMusic( matchDetails, assistant, callback ) {
         console.log('Playing '+type+':'+name+' on '+player);
 
         onOutput = function(data){
-            let lines = data.split('\n');
-            let response = '';
-            let tracks;
-            for (let i=0; i<lines.length; i++) {
-                if (!lines[i].length) continue;
-                if (lines[i].match(/^\[/)) {
-                    tracks = JSON.parse( lines.slice(i).join('\n') );
-                    break;
-                }
-                response = lines[i];
-            }
+            let response, tracks;
+            [response,tracks] = parseResponse(data);
             
             if (!Array.isArray(tracks)) {
                 callback(response);
@@ -330,8 +339,52 @@ let capabilities = [
     }
 ];
 
+function htmlspecialchars(str) {
+    str = str.replace(/&/g, "&amp;"); /* must do &amp; first */
+    str = str.replace(/"/g, "&quot;");
+    str = str.replace(/'/g, "&#039;");
+    str = str.replace(/</g, "&lt;");
+    str = str.replace(/>/g, "&gt;");
+    return str;
+}
+
+function startup( manager ) {
+    manager.httpFileServer.addHandler( 'artists', function( request, response ) {
+        playlistMaker.stdin.write('catalogue:\n');
+        console.log('Requesting catalogue from playlist maker');
+
+        onOutput = function(data){
+            let albums = parseResponse(data)[1];
+
+            let lastArtist=null;
+            let output='';
+            for( let album of albums ) {
+                if (album.artist!=lastArtist) {
+                    if (lastArtist!=null) output += '</ul></li>';
+                    output += '<li class="artist"><span class="name">'+htmlspecialchars(album.artist)+'</span>';
+                    output += '<ul class="albums">';
+                }
+                output += '<li class="album"><span class="name">'+htmlspecialchars(album.album)+'</span></li>';
+                lastArtist = album.artist;
+            }
+            
+            output = '<ul class="artists">'+output+'</li></ul>';
+            
+            let catalogueTemplateFile = path.join(__dirname, 'catalogue.html');
+            fs.readFile(catalogueTemplateFile, function (err, data ) {
+                if ( err ) data = 'Error loading catalogue template file: '+err;
+                else data = data.toString().replace('<<output>>',output);
+                response.writeHead(200, {'Content-Type':'text/html; charset=utf-8'} );
+                response.write(data);
+                response.end();
+            }); 
+        }
+    });
+}
+
 module.exports = {
     phrasebook: phrasebook,
     matchFunctions: matchFunctions,
-    capabilities: capabilities
+    capabilities: capabilities,
+    startup: startup,
 }

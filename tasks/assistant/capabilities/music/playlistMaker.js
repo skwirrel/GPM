@@ -203,11 +203,23 @@ function fuzzyLookup( type, searchTerm ) {
 
 function makePlaylist( type, searchTerm, callback ) {
 
-    if (!type.length || ':artist:album:track:anything:something:'.indexOf(type)==-1) return callback('Invalid search type ('+type+'). Expected: "album", "artist", "track", "anything" or "something"');
+    if (!type.length || ':catalogue:artist:album:track:anything:something:'.indexOf(type)==-1) return callback('Invalid search type ('+type+'). Expected: "catalogue", "album", "artist", "track", "anything" or "something"');
     
     var requestedTracks = {};
     let emptyMessage = '';
     let message;
+    
+    if (type=='catalogue') {
+        let rows = [];
+        const queryHandle = db.prepare('SELECT DISTINCT artist, album FROM items ORDER BY artist,album');
+        
+        for (const row of queryHandle.iterate()) {
+            rows.push(row);
+        }
+        
+        callback('',rows,[]);
+        return;
+    }
     
     let result;
     if (type=='anything') result = lookups.artist[Math.floor(Math.random()*(lookups.artist.length-0.001))];
@@ -351,21 +363,21 @@ function processQueue() {
         }
         let [type,searchTerm] = commandQueue.shift();
         if (type=='END') process.exit();
-        makePlaylist( type, searchTerm, function(message,requestedTracks,extraTracks){
+        makePlaylist( type, searchTerm, function(message,requestedTracks,extraTracks,ignoreLimit){
             process.stdout.write(message+"\n");
             let output = [];
             let count = 0;
             if (requestedTracks) {
                 for( id in requestedTracks) {
-                    if (count++>config.playlistMaxTracks) break;
-                    requestedTracks[id].path = requestedTracks[id].path.toString();
+                    if (!ignoreLimit && count++>config.playlistMaxTracks) break;
+                    if (requestedTracks[id].hasOwnProperty('path')) requestedTracks[id].path = requestedTracks[id].path.toString();
                     output.push(requestedTracks[id]);
                 }
             }
             if (extraTracks) {
                 for( id in extraTracks) {
-                    if (count++>config.playlistMaxTracks) break;
-                    extraTracks[id].path = extraTracks[id].path.toString();
+                    if (!ignoreLimit && count++>config.playlistMaxTracks) break;
+                    if (extraTracks[id].hasOwnProperty('path')) extraTracks[id].path = extraTracks[id].path.toString();
                     output.push(extraTracks[id])
                 }
             }
