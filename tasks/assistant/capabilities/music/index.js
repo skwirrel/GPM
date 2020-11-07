@@ -348,38 +348,42 @@ function htmlspecialchars(str) {
     return str;
 }
 
-function startup( manager ) {
-    manager.httpFileServer.addHandler( 'artists', function( request, response ) {
-        playlistMaker.stdin.write('catalogue:\n');
-        console.log('Requesting catalogue from playlist maker');
+function catalogueHandler( type, request, response ) {
+    playlistMaker.stdin.write('catalogue:'+type+'s\n');
+    console.log('Requesting '+type+' catalogue from playlist maker');
 
-        onOutput = function(data){
-            let albums = parseResponse(data)[1];
+    onOutput = function(data){
+        let items = parseResponse(data)[1];
 
-            let lastArtist=null;
-            let output='';
-            for( let album of albums ) {
-                if (album.artist!=lastArtist) {
-                    if (lastArtist!=null) output += '</ul></li>';
-                    output += '<li class="artist"><span class="name">'+htmlspecialchars(album.artist)+'</span>';
-                    output += '<ul class="albums">';
-                }
-                output += '<li class="album"><span class="name">'+htmlspecialchars(album.album)+'</span></li>';
-                lastArtist = album.artist;
+        let subType = type=='artist'?'album':'artist';
+        let lastItem=null;
+        let output='';
+        for( let item of items ) {
+            if (item[type]!=lastItem) {
+                if (lastItem!=null) output += '</ul></li>';
+                output += '<li class="mainItem '+type+'"><span class="name">'+htmlspecialchars(item[type])+'</span>';
+                output += '<ul class="subItems '+subType+'s">';
             }
-            
-            output = '<ul class="artists">'+output+'</li></ul>';
-            
-            let catalogueTemplateFile = path.join(__dirname, 'catalogue.html');
-            fs.readFile(catalogueTemplateFile, function (err, data ) {
-                if ( err ) data = 'Error loading catalogue template file: '+err;
-                else data = data.toString().replace('<<output>>',output);
-                response.writeHead(200, {'Content-Type':'text/html; charset=utf-8'} );
-                response.write(data);
-                response.end();
-            }); 
+            output += '<li class="subItem '+subType+'"><span class="name">'+htmlspecialchars(item[subType])+'</span></li>';
+            lastItem = item[type];
         }
-    });
+        
+        output = '<ul class="mainItems '+type+'s">'+output+'</li></ul>';
+        
+        let catalogueTemplateFile = path.join(__dirname, 'catalogue.html');
+        fs.readFile(catalogueTemplateFile, function (err, data ) {
+            if ( err ) data = 'Error loading catalogue template file: '+err;
+            else data = data.toString().replace('<<output>>',output);
+            response.writeHead(200, {'Content-Type':'text/html; charset=utf-8'} );
+            response.write(data);
+            response.end();
+        }); 
+    }
+}
+
+function startup( manager ) {
+    manager.httpFileServer.addHandler( 'artists', function( request, response ) { catalogueHandler( 'artist', request, response ); });
+    manager.httpFileServer.addHandler( 'albums', function( request, response ) { catalogueHandler( 'album', request, response ); });
 }
 
 module.exports = {
