@@ -153,34 +153,44 @@ let capabilities = [
         },
     },{
         context         : 'main',
+        // Google seems to often here "time is" instead of "timers"
+        // so listen out for this as well
         incantations    : [
-            '[tell me] [how many] (which:[timer|alarm])s [do I [currently] have|are [there] [currently]|] set [|at th[e|is] moment|[right] now]',
-            '[tell me] [are|is] [there] any (which:[timer|alarm])s [currently] set [|at th[e|is] moment|[right] now]'
+            '[tell me] [how many] (which:[time is|timers|alarms]) [do I [currently] have|are [there] [currently]|] set [|at th[e|is] moment|[right] now]',
+            '[tell me] [are|is] [there] any (which:[time is|timer|alarm])s [currently] set [|at th[e|is] moment|[right] now]'
         ],
         handler         : function( matchDetails, assistant, callback ) {
-            let things = future[matchDetails.which+'s'];
+            let which = matchDetails.which;
+            if (which=='time is') which='timers';
+            which = which.replace(/s$/,'');
+
+            let things = future[which+'s'];
             
-            let response = 'There are '+things.length+' '+matchDetails.which+'s set at the moment';
+            let response = 'There are '+things.length+' '+which+'s set at the moment';
             
             if (things.length==0) {
-                response = 'There aren\'t any '+matchDetails.which+'s set right now';
+                response = 'There aren\'t any '+which+'s set right now';
             } else if (!things.length ==1) {
-                response = 'There is only one '+matchDetails.which+' set right now';
+                response = 'There is only one '+which+' set right now';
             }
             return response;
         },
     },{
         context         : 'main',
-        incantation     : '[tell me] [what|which] (which:[timer|alarm])[s] [[do] I [currently] have [set]|have I [currently] [got] [set]|are [there] set] [running] [|at th[e|is] moment|[right] now]',
+        incantation     : '[tell me] [what|which] (which:[time is|timer|alarm])[s] [[do] I [currently] have [set]|have I [currently] [got] [set]|are [there] set] [running] [|at th[e|is] moment|[right] now]',
         handler         : function( matchDetails, assistant, callback ) {
-            let things = future[matchDetails.which+'s'];
+            let which = matchDetails.which;
+            if (which=='time is') which='timers';
+            which = which.replace(/s$/,'');
+
+            let things = future[which+'s'];
             if (!things.length) {
-                return 'You don\'t have any '+matchDetails.which+'s set at the moment';
+                return 'You don\'t have any '+which+'s set at the moment';
             }
             if (things.length==1) {
                 return 'You have '+assistant.indefiniteArticle(things[0].description)+things[0].description;
             }
-            let response = 'You have the following '+matchDetails.which+'s set: ';
+            let response = 'You have the following '+which+'s set: ';
             response += assistant.englishJoin(things.map(entry=>assistant.indefiniteArticle(entry.description)+entry.description),';');
             return response;
         },
@@ -188,7 +198,7 @@ let capabilities = [
         context         : 'main',
         incantations    : [
             '[stop|cancel|abort|delete|clear] [|the|a] [|(name:<stuff>)|(timerDuration:$daysDuration)] timer [[called|for] (name:<stuff>)]',
-            '[stop|cancel|abort|delete|clear] (all:all) [of] [the|my] timers'
+            '[stop|cancel|abort|delete|clear] (all:all) [of] [the|my] [timers|time is]'
         ],
         handler         : cancelTimer,
     },{

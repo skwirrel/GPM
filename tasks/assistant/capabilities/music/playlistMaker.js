@@ -217,7 +217,7 @@ function makePlaylist( type, searchTerm, callback ) {
             rows.push(row);
         }
         
-        callback('',rows,[]);
+        callback('',rows,[],true);
         return;
     }
     
