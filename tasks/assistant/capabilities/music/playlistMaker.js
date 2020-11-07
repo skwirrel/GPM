@@ -211,7 +211,12 @@ function makePlaylist( type, searchTerm, callback ) {
     
     if (type=='catalogue') {
         let rows = [];
-        const queryHandle = db.prepare('SELECT DISTINCT artist, album FROM items ORDER BY artist,album');
+        let sql;
+        
+        if (searchTerm=='artists') sql = 'SELECT DISTINCT artist, album FROM items ORDER BY artist,album';
+        else sql = 'SELECT DISTINCT artist, album FROM items ORDER BY album,artist';
+        
+        const queryHandle = db.prepare(sql);
         
         for (const row of queryHandle.iterate()) {
             rows.push(row);
