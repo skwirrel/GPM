@@ -295,20 +295,6 @@ mapSubdirectories('./devices/',loadObject,'device');
 
 spawn('/usr/bin/play', ['sounds/ready.mp3']);
 
-// WiFi on Raspberry Pi can timeout periodically if we don't keep it alive
-// See https://www.raspberrypi.org/forums/viewtopic.php?f=36&t=234058&p=1432916#p1432916
-setInterval(function() {
-    console.log('Scanning WiFi to keep it alive');
-
-    let cmd = 'wpa_cli -i wlan0 scan';
-    exec(cmd, (error, stdout, stderr) => {
-        if (error) console.log(`wpa_cli error: ${error.message}`);
-        if (stderr) console.log(`wpa_cli stderr: ${stderr}`);
-        if (stdout) console.log(`wpa_cli stdout: ${stdout}`);
-    });
-
-},120*1000);
-
 setTimeout(function() {
     console.log('Setup phase complete\n===================================\n');
-},1000);
+},5000);

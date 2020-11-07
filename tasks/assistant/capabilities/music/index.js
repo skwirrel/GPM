@@ -115,6 +115,9 @@ function playMusic( matchDetails, assistant, callback ) {
                 if (player != 'local') response += ' on '+player;
                 callback({
                     do : function(){
+                        for( let track of tracks ) {
+                            console.log('Queuing track: '+track.name);
+                        }
                         assistant.manager.audioPlayer(player,'enqueue',tracks);
                         // When playing from a playlist of URL's we need to wait till mplayer has actually
                         // cued the song up before telling it to play
@@ -137,24 +140,6 @@ let capabilities = [
             '$delayStart play [me] (radio:<radioStation>) [$onDevice] $delayStart',
         ],
         handler         : playMusic
-    },{
-        incantations    : [
-            '$delayStart play [me] (anything:[[|some|any] music|anything]) [$onDevice] $delayStart',
-            '$delayStart play [me] [[[a] track[s]|[some] music|something] [by|from] [the [artist|band|musician|composer]]|some] (artist:<stuff>) [$onDevice] $delayStart',
-            '$delayStart play [me] the album (album:<stuff>) [$onDevice] $delayStart',
-            '$delayStart play [me] [the] [track|song] (track:<stuff>) [$onDevice] $delayStart',
-            '$delayStart play [me] (something:<stuff>) [$onDevice] $delayStart',
-        ],
-        handler         : playMusic
-    },{
-        incantations    : [
-            '[tell me] what [speakers|[music] players|chromecast[s]|[|chromecast|[music] [player|playback]] device[s]] [do I have|are [there] [available]|can I [stream|send|play] [music] [to[o]|on]] [on the network]',
-        ],
-        handler         : function(matchDetails, assistant, callback ) {
-            players = Object.keys(assistant.manager.audioPlayers).sort();
-            response = 'You can stream music to the following devices: '+assistant.englishJoin(players,';');
-            return( response );
-        }
     },{
         incantations    : [
             '[play [me] the] (direction:[next|previous]) [|track|song] [$onDevice]',
@@ -186,6 +171,24 @@ let capabilities = [
 
             assistant.manager.audioPlayer(player,matchDetails.direction);
             return {};
+        }
+    },{
+        incantations    : [
+            '$delayStart play [me] (anything:[[|some|any] music|anything]) [$onDevice] $delayStart',
+            '$delayStart play [me] [[[a] track[s]|[some] music|something] [by|from] [the [artist|band|musician|composer]]|some] (artist:<stuff>) [$onDevice] $delayStart',
+            '$delayStart play [me] the album (album:<stuff>) [$onDevice] $delayStart',
+            '$delayStart play [me] [the] [track|song] (track:<stuff>) [$onDevice] $delayStart',
+            '$delayStart play [me] (something:<stuff>) [$onDevice] $delayStart',
+        ],
+        handler         : playMusic
+    },{
+        incantations    : [
+            '[tell me] what [speakers|[music] players|chromecast[s]|[|chromecast|[music] [player|playback]] device[s]] [do I have|are [there] [available]|can I [stream|send|play] [music] [to[o]|on]] [on the network]',
+        ],
+        handler         : function(matchDetails, assistant, callback ) {
+            players = Object.keys(assistant.manager.audioPlayers).sort();
+            response = 'You can stream music to the following devices: '+assistant.englishJoin(players,';');
+            return( response );
         }
     },{
         incantations    : [

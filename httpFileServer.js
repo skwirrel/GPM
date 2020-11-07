@@ -30,7 +30,8 @@ function httpFileServer() {
             '.html': "text/html",
             '.css':  "text/css",
             '.js':   "text/javascript",
-            '.mp3':   "audio/mpeg"
+            '.mp3':   "audio/mpeg",
+            '.ogg':   "audio/ogg"
           };
 
         let uri = url.parse(request.url).pathname;
@@ -86,7 +87,7 @@ httpFileServer.prototype.serveFile = function( filename ) {
         new Date().getTime()
     ];
     // console.log('Added new file to web server file store. This now contains %d files',Object.keys(fileMap).length);
-    return 'http://'+global.myIp+':'+port+'/'+id;
+    return 'http://127.0.0.1:'+port+'/'+id;
 }
 
 module.exports = httpFileServer;

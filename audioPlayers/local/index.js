@@ -18,7 +18,7 @@ audioPlayer.prototype.startPlayer = function() {
     var self = this;
     
 	console.log('Starting up local audio player');
-	this.process = spawn('mplayer',['-slave','-quiet','-pausing','2','-nolirc','-nomouseinput','-idle','-volume','50']);
+	this.process = spawn('mplayer',['-softvol','-slave','-quiet','-pausing','2','-nolirc','-nomouseinput','-idle','-volume','50']);
 
     var justStarted = true;
 	this.process.stdout.on('data',function(data){
