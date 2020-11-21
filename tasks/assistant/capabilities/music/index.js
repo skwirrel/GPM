@@ -336,6 +336,28 @@ let capabilities = [
                 assistant.manager.nowPlaying( respond );
             }
         }
+    },{
+        incantations    : [
+            'why are you playing this [|music|track]',
+        ],
+        handler         : function(matchDetails, assistant, callback ) {
+            let respond = function( nowPlaying ) {
+                if (nowPlaying===false) return callback('Nothing is playing at the moment')
+                let response;
+                if (Object.keys(nowPlaying).length==1) {
+                    let track = nowPlaying[Object.keys(nowPlaying)[0]];
+                    response = 'Currently playing: '+describeTrack( track )+' because '+track.reason;
+                } else {
+                    response = [];
+                    for( let player in nowPlaying ) {
+                        response.push( player + ' is playing ' + describeTrack( nowPlaying[player] )+' because '+nowPlaying[player].reason );
+                    }
+                    response = assistant.englishJoin(response);
+                }
+                callback(response);
+            }
+            assistant.manager.nowPlaying( respond );
+        }
     }
 ];
 

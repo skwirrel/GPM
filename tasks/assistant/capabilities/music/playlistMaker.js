@@ -184,6 +184,7 @@ const lookups = {
     artist: getRows('select distinct mb_artistid, artist from items where genre<>\'Books & Spoken\'','artist'),
     track: getRows('select distinct mb_trackid, title from items where genre<>\'Books & Spoken\'','title'),
     album: getRows('select distinct mb_albumid, album from items where genre<>\'Books & Spoken\'','album'),
+    audioBook: getRows('select distinct mb_albumid, album from items where genre=\'Books & Spoken\'','audioBook'),
 };
 // if the type is "something" then look for a matching track, followed by a matching album followed by a matching artist
 lookups.something = lookups.track.concat(lookups.album,lookups.artist);
@@ -227,38 +228,42 @@ function makePlaylist( type, searchTerm, callback ) {
     }
     
     let result;
-    if (type=='anything') result = lookups.artist[Math.floor(Math.random()*(lookups.artist.length-0.001))];
+    if (type=='anything') result = lookups.artist[Math.floor(Math.random()*lookups.artist.length)];
     else [result,type] = fuzzyLookup(type.toLowerCase(),searchTerm);
 
     if (!result) {
         if (type=='something') type='any music mathing';
         return callback('Couldn\'t find '+type+': "'+searchTerm+'"');
     } else {
-        let tracks;
+        let tracks, reason;
         message = 'Playing '+type+': '+result[type];
         if (type=='artist') {
             tracks = getRows('SELECT id, title, path, album, artist, mb_artistid, mb_trackid FROM items WHERE artist=? ORDER BY RANDOM()',false,result.artist);
             emptyMessage = 'Couldn\'t find any music by: '+searchTerm;
-            message = 'Playing music by "'+searchTerm+'"';
+            message = 'Playing music by "'+result.artist+'"';
+            reason = 'This track is by the artist I think you requested: '+result.artist;
         } else if (type == 'track') {
             tracks = getRows('SELECT id, title, path, album, artist, mb_artistid, mb_trackid FROM items WHERE title=?',false,result.title);
             emptyMessage = 'Couldn\'t find a track called "'+searchTerm+'"';
-            message = 'Playing the track: "'+searchTerm+'"';
+            message = 'Playing the track: "'+result.title+'"';
+            reason = 'This is the track I think you requested: '+result.title;
         } else if (type == 'album') {
             tracks = getRows('SELECT id, title, path, album, artist, mb_artistid, mb_trackid FROM items WHERE album=? ORDER BY disc,track',false,result.album);
             emptyMessage = 'Couldn\'t find the album: '+searchTerm;
-            message = 'Playing the album: "'+searchTerm+'"';
+            message = 'Playing the album: "'+result.album+'"';
+            reason = 'This is track is on the album you requested: '+result.album;
         } else if (type == 'anything') {
             // pick an artist at random
             message = 'Playing some music';
             tracks = getRows('SELECT id, title, path, album, artist, mb_artistid, mb_trackid FROM items WHERE artist=? ORDER BY RANDOM() LIMIT 1',false,result.artist);
             emptyMessage = 'Couldn\'t find any music at all';
+            reason = 'This track is by the artist I selected at random, for you: '+result.artist;
         }
         
         if (!tracks.length) return callback(emptyMessage);
 
         var idx=0;
-        tracks.forEach(function(track){ track.idx = idx++; requestedTracks[track.id]=track; });
+        tracks.forEach(function(track){ track.idx = idx++; track.reason=reason; requestedTracks[track.id]=track; });
     }
 
     if (!Object.keys(requestedTracks).length) callback(message,[],[]);
@@ -274,7 +279,10 @@ function makePlaylist( type, searchTerm, callback ) {
             var averageYear = Math.round(result[0].average);
             if (averageYear>0) {
                 console.log('recording year is:'+averageYear);
-                decadeTracks = getRows('SELECT items.id,items.path,items.artist, items.album, items.title FROM item_attributes INNER JOIN items ON items.id=item_attributes.entity_id WHERE item_attributes.key=\'recording_year\' AND (item_attributes.value >=? AND item_attributes.value <=?) AND genre<>\'Books & Spoken\' ORDER BY ABS(item_attributes.value-?),RANDOM()',false,averageYear-yearsEitherSide,averageYear+yearsEitherSide,averageYear);
+                decadeTracks = getRows('SELECT items.id,items.path,items.artist, items.album, items.title, item_attributes.value AS year FROM item_attributes INNER JOIN items ON items.id=item_attributes.entity_id WHERE item_attributes.key=\'recording_year\' AND (item_attributes.value >=? AND item_attributes.value <=?) AND genre<>\'Books & Spoken\' ORDER BY ABS(item_attributes.value-?),RANDOM()',false,averageYear-yearsEitherSide,averageYear+yearsEitherSide,averageYear);
+                for( let track of decadeTracks ) {
+                    track.reason='This track was recorded in '+track.year+' which is within 5 years of '+averageYear;
+                }
             }
         }
     }
@@ -311,6 +319,7 @@ function makePlaylist( type, searchTerm, callback ) {
                 if (requestedTracks[track.id]) continue;
                 if (typeof(extras[track.artist])=='undefined') extras[track.artist]={};
                 else if (fullArtists[track.artist]) continue;
+                track.reason='This tracks is similar to one of the tracks originally requested';
                 extras[track.artist][track.id]=track;
                 if (Object.keys(extras[track.artist]).length == maxExtraTracksPerArtist) fullArtists[track.artist]=true;
             }
