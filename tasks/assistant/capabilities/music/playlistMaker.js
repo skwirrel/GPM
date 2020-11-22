@@ -4,11 +4,12 @@ const config = require('../../../../configLoader.js')({
     audioscrobblerMaxCacheAge           : 100,
     playlistMaxExtraTracksPerArtist     : 10,
     playlistYearsEitherSide             : 5,
-    playlistMaxTracks                   : 100,
+    playlistMaxTracks                   : 60,
 });
 
 const yearsEitherSide = parseInt(config.playlistYearsEitherSide);
 const maxExtraTracksPerArtist = parseInt(config.playlistMaxExtraTracksPerArtist);
+const maxTracks = parseInt(config.playlistMaxTracks);
 
 const fs = require('fs');
 const http = require('http');
@@ -162,22 +163,74 @@ function downloadPage(url,callback) {
     
 }
 
-function getSimilar(mbid,callback) {
+function getSimilar(which,mbid,callback) {
     const audioscrobblerBaseUrl = 'http://ws.audioscrobbler.com/2.0/?';
     let queryString = new URLSearchParams({
         api_key:'4a4228c2a52d30641203c4e08fd0831c',
         format:'json',
         mbid:mbid,
-        method:'track.getsimilar'
+        method:which+'.getsimilar'
     });
     const url = audioscrobblerBaseUrl + queryString;
-    downloadPage(url,function(tracks){
+    downloadPage(url,function(results){
         console.log(url);
-        if (!tracks || !tracks.similartracks || !tracks.similartracks.track) callback(false,[]);
-        else callback(false,tracks.similartracks.track);
+        if (which=='track') {
+            if (!results || !results.similartracks || !results.similartracks.track) callback(false,[]);
+            else callback(false,results.similartracks.track);
+        } else {
+            if (!results || !results.similarartists || !results.similarartists.artist) callback(false,[]);
+            else callback(false,results.similarartists.artist);
+        }
     });
 }
 const getSimilarPromise = util.promisify(getSimilar);
+
+function similarLookup( which, ids, requestedTracks, extras, fullArtists, callback ) {
+
+    let getSimilarTracksPromises=[];
+    for( let id of ids ) {
+        getSimilarTracksPromises.push(getSimilarPromise(which,id));
+    };
+    
+    Promise.all(getSimilarTracksPromises).then( function(results) {
+        // flatten the results array
+        results = [].concat.apply([], results);
+        let mbids = {};
+        for( let i=0; i<results.length; i++ ) {
+            let similarTrack = results[i];
+            if (!similarTrack.mbid || mbids[similarTrack.mbid]) continue;
+            mbids[similarTrack.mbid]=true;
+        }
+        mbids = shuffle(Object.keys(mbids));
+        let similarTrackCount=0;
+        let sql = 'select id, path, artist,title from items where mb_'+which+'id';
+        do {
+            let chunk=mbids.splice(0,100);
+            if (!chunk.length) break;
+            chunk = '\''+chunk.join('\',\'',)+'\'';
+            let foundSimilar = getRows( sql+' IN ('+chunk+') ORDER BY RANDOM()');
+            for( let i=0; i<foundSimilar.length; i++ ){
+                if (similarTrackCount>maxTracks) break;
+                let track = foundSimilar[i];
+                console.log('Found similar: '+track.title+' by '+track.artist);
+                // exclude anything that is already in the list of requestedTracks
+                if (requestedTracks[track.id]) continue;
+                if (typeof(extras[track.artist])=='undefined') extras[track.artist]={};
+                else if (fullArtists[track.artist]) continue;
+                similarTrackCount++;
+                if (which=='track') {
+                    track.reason='This tracks is similar to one of the tracks that you originally requested';
+                } else {
+                    track.reason='This tracks is by an artist who is similar to the artist for one of the tracks that you originally requested';
+                }
+                extras[track.artist][track.id]=track;
+                if (Object.keys(extras[track.artist]).length == maxExtraTracksPerArtist) fullArtists[track.artist]=true;
+            }
+        } while( true );
+
+        callback( similarTrackCount );
+    });
+}
 
 const db = require('better-sqlite3')(config.musicLibraryDbFile);
 const lookups = {
@@ -286,66 +339,54 @@ function makePlaylist( type, searchTerm, callback ) {
             }
         }
     }
-    
-    let getSimilarPromises=[];
-    for( trackId in requestedTracks ) {
-        track = requestedTracks[trackId];
-        if (!track.mb_trackid) continue;
-        getSimilarPromises.push(getSimilarPromise(track.mb_trackid));
-    };
 
     var extras = {};
     var fullArtists = {};
+
+    let lookupTrackIds = [];
+    let lookupArtistIds = {};
+    for( let track of Object.entries( requestedTracks )) {
+        track = track[1];
+        if (!track.mb_trackid.length) continue;
+        lookupTrackIds.push(track.mb_trackid);
+        if (!track.mb_artistid.length) continue;
+        lookupArtistIds[track.mb_artistid]=true;
+    };
+    lookupArtistIds = Object.keys(lookupArtistIds);
     
-    Promise.all(getSimilarPromises).then( function(results) {
-        // flatten the results array
-        results = [].concat.apply([], results);
-        let mbids = {};
-        for( let i=0; i<results.length; i++ ) {
-            let similarTrack = results[i];
-            if (!similarTrack.mbid || mbids[similarTrack.mbid]) continue;
-            mbids[similarTrack.mbid]=true;
-        }
-        mbids = Object.keys(mbids);
-        do {
-            let chunk=mbids.splice(0,100);
-            if (!chunk.length) break;
-            chunk = '\''+chunk.join('\',\'',)+'\'';
-            let foundSimilar = getRows('select id, path, artist,title from items where mb_trackid IN ('+chunk+')');
-            for( let i=0; i<foundSimilar.length; i++ ){
-                let track = foundSimilar[i];
-                console.log('Found similar: '+track.title+' by '+track.artist);
-                // exclude anything that is already in the list of requestedTracks
-                if (requestedTracks[track.id]) continue;
+    similarLookup( 'track', lookupTrackIds, requestedTracks, extras, fullArtists, function(similarTrackCount){
+        
+        console.log('Found '+similarTrackCount+' similar tracks');
+        // look for similar artists
+        similarLookup( 'artist', lookupArtistIds, requestedTracks, extras, fullArtists, function(similarArtistCount){
+            console.log('Found '+similarArtistCount+' tracks by similar artists');
+            let numTracks = Object.keys(requestedTracks).length + similarTrackCount + similarArtistCount;
+
+            // Now throw in everything x years either side of the averageYear
+            for( let i=0; i<decadeTracks.length; i++ ) {
+                if (numTracks>=maxTracks) break;
+                let track = decadeTracks[i];
                 if (typeof(extras[track.artist])=='undefined') extras[track.artist]={};
-                else if (fullArtists[track.artist]) continue;
-                track.reason='This tracks is similar to one of the tracks originally requested';
+                if (fullArtists[track.artist] || requestedTracks[track.id]) continue;
+                numTracks++;
                 extras[track.artist][track.id]=track;
                 if (Object.keys(extras[track.artist]).length == maxExtraTracksPerArtist) fullArtists[track.artist]=true;
             }
-        } while( true );
-        
-        // Now throw in everything x years either side of the averageYear
-        for( let i=0; i<decadeTracks.length; i++ ) {
-            let track = decadeTracks[i];
-            if (typeof(extras[track.artist])=='undefined') extras[track.artist]={};
-            if (fullArtists[track.artist] || requestedTracks[track.id]) continue;
-            extras[track.artist][track.id]=track;
-            if (Object.keys(extras[track.artist]).length == maxExtraTracksPerArtist) fullArtists[track.artist]=true;
-        }
 
-        let extraTracks = [];
-        for( let artist in extras ) {
-            for( let id in extras[artist] ) {
-                extraTracks.push(extras[artist][id]);
+            let extraTracks = [];
+            for( let artist in extras ) {
+                for( let id in extras[artist] ) {
+                    extraTracks.push(extras[artist][id]);
+                }
             }
-        }
 
-        shuffle(extraTracks);
-        // Convert the requestedTracks into an array in the order they were originally pulled out of the database in
-        requestedTracks = Object.values(requestedTracks).sort((a,b)=>b.idx-a.idx);
-        
-        callback( message, requestedTracks, extraTracks );
+            shuffle(extraTracks);
+            
+            // Convert the requestedTracks into an array in the order they were originally pulled out of the database in
+            requestedTracks = Object.values(requestedTracks).sort((a,b)=>b.idx-a.idx);
+            
+            callback( message, requestedTracks, extraTracks );
+        });
     });
 }
 
@@ -383,14 +424,14 @@ function processQueue() {
             let count = 0;
             if (requestedTracks) {
                 for( id in requestedTracks) {
-                    if (!ignoreLimit && count++>config.playlistMaxTracks) break;
+                    if (!ignoreLimit && count++>maxTracks) break;
                     if (requestedTracks[id].hasOwnProperty('path')) requestedTracks[id].path = requestedTracks[id].path.toString();
                     output.push(requestedTracks[id]);
                 }
             }
             if (extraTracks) {
                 for( id in extraTracks) {
-                    if (!ignoreLimit && count++>config.playlistMaxTracks) break;
+                    if (!ignoreLimit && count++>maxTracks) break;
                     if (extraTracks[id].hasOwnProperty('path')) extraTracks[id].path = extraTracks[id].path.toString();
                     output.push(extraTracks[id])
                 }
