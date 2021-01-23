@@ -97,7 +97,6 @@ audioPlayer.prototype.launch = function() {
     this.client.on('error', function(err) {
         console.log('Chromecast error: '+err.message);
     });
-});
 }
 
 audioPlayer.prototype.playerAction = function( callback ) {
