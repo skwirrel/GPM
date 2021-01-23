@@ -185,7 +185,7 @@ function getSimilar(which,mbid,callback) {
 }
 const getSimilarPromise = util.promisify(getSimilar);
 
-function similarLookup( which, ids, requestedTracks, extras, fullArtists, callback ) {
+function similarLookup( which, ids, extraMbid, requestedTracks, extras, fullArtists, callback ) {
 
     let getSimilarTracksPromises=[];
     for( let id of ids ) {
@@ -197,10 +197,12 @@ function similarLookup( which, ids, requestedTracks, extras, fullArtists, callba
         results = [].concat.apply([], results);
         let mbids = {};
         for( let i=0; i<results.length; i++ ) {
-            let similarTrack = results[i];
-            if (!similarTrack.mbid || mbids[similarTrack.mbid]) continue;
-            mbids[similarTrack.mbid]=true;
+            let similarItem = results[i];
+            if (!similarItem.mbid || mbids[similarItem.mbid]) continue;
+            mbids[similarItem.mbid]=true;
         }
+        // add in the extra mbid if one has been provided
+        if (extraMbid.length) mbids[extraMbid]=true;
         mbids = shuffle(Object.keys(mbids));
         let similarTrackCount=0;
         let sql = 'select id, path, artist,title from items where mb_'+which+'id';
@@ -262,6 +264,7 @@ function makePlaylist( type, searchTerm, callback ) {
     var requestedTracks = {};
     let emptyMessage = '';
     let message;
+    let originalArtistMbid = '';
     
     if (type=='catalogue') {
         let rows = [];
@@ -298,19 +301,28 @@ function makePlaylist( type, searchTerm, callback ) {
         } else if (type == 'track') {
             tracks = getRows('SELECT id, title, path, album, artist, mb_artistid, mb_trackid FROM items WHERE title=?',false,result.title);
             emptyMessage = 'Couldn\'t find a track called "'+searchTerm+'"';
-            message = 'Playing the track: "'+result.title+'"';
-            reason = 'This is the track I think you requested: '+result.title;
+            if (tracks.length) {
+                message = 'Playing the track: "'+tracks[0].title+'"';
+                reason = 'This is the track I think you requested: '+tracks[0].title;
+                originalArtistMbid = tracks[0]['mb_artistid'];
+            }
         } else if (type == 'album') {
             tracks = getRows('SELECT id, title, path, album, artist, mb_artistid, mb_trackid FROM items WHERE album=? ORDER BY disc,track',false,result.album);
             emptyMessage = 'Couldn\'t find the album: '+searchTerm;
-            message = 'Playing the album: "'+result.album+'"';
-            reason = 'This is track is on the album you requested: '+result.album;
+            if (tracks.length) {
+                message = 'Playing the album: "'+tracks[0].album+'"';
+                reason = 'This is track is on the album you requested: '+tracks[0].album;
+                originalArtistMbid = tracks[0]['mb_artistid'];
+            }
         } else if (type == 'anything') {
             // pick an artist at random
             message = 'Playing some music';
             tracks = getRows('SELECT id, title, path, album, artist, mb_artistid, mb_trackid FROM items WHERE artist=? ORDER BY RANDOM() LIMIT 1',false,result.artist);
-            emptyMessage = 'Couldn\'t find any music at all';
-            reason = 'This track is by the artist I selected at random, for you: '+result.artist;
+            if (tracks.length) {
+                emptyMessage = 'Couldn\'t find any music at all';
+                reason = 'This track is by the artist I selected at random, for you: '+tracks[0].artist;
+                originalArtistMbid = tracks[0]['mb_artistid'];
+            }
         }
         
         if (!tracks.length) return callback(emptyMessage);
@@ -354,11 +366,11 @@ function makePlaylist( type, searchTerm, callback ) {
     };
     lookupArtistIds = Object.keys(lookupArtistIds);
     
-    similarLookup( 'track', lookupTrackIds, requestedTracks, extras, fullArtists, function(similarTrackCount){
+    similarLookup( 'track', lookupTrackIds, '', requestedTracks, extras, fullArtists, function(similarTrackCount){
         
         console.log('Found '+similarTrackCount+' similar tracks');
         // look for similar artists
-        similarLookup( 'artist', lookupArtistIds, requestedTracks, extras, fullArtists, function(similarArtistCount){
+        similarLookup( 'artist', lookupArtistIds, originalArtistMbid, requestedTracks, extras, fullArtists, function(similarArtistCount){
             console.log('Found '+similarArtistCount+' tracks by similar artists');
             let numTracks = Object.keys(requestedTracks).length + similarTrackCount + similarArtistCount;
 
@@ -383,7 +395,7 @@ function makePlaylist( type, searchTerm, callback ) {
             shuffle(extraTracks);
             
             // Convert the requestedTracks into an array in the order they were originally pulled out of the database in
-            requestedTracks = Object.values(requestedTracks).sort((a,b)=>b.idx-a.idx);
+            requestedTracks = Object.values(requestedTracks).sort((a,b)=>a.idx-b.idx);
             
             callback( message, requestedTracks, extraTracks );
         });

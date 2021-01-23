@@ -125,7 +125,7 @@ function playMusic( matchDetails, assistant, callback ) {
                 callback({
                     do : function(){
                         for( let track of tracks ) {
-                            console.log('Queuing track: '+track.name);
+                            console.log('Queuing track: '+track.title+' by '+track.artist);
                         }
                         assistant.manager.audioPlayer(player,'enqueue',tracks);
                         // When playing from a playlist of URL's we need to wait till mplayer has actually
@@ -152,7 +152,8 @@ let capabilities = [
     },{
         incantations    : [
             '[play [me] the] (direction:[next|previous]) [|track|song] [$onDevice]',
-            '[go] (direction:back) [|a song|to the [last|previos] song]',
+            '[go|move] (direction:back) [|a song|to the [last|previos] [song|track]]',
+            '[go|move] (direction:[forward|on|back[ward]])[s] (number:[$doubleDigitInteger|$doubleDigitIntegerWords]) [song|track][s]',
         ],
         handler         : function(matchDetails, assistant, callback ) {
             // if they specified a device then that's easy...
@@ -178,7 +179,13 @@ let capabilities = [
                     
             }
 
-            assistant.manager.audioPlayer(player,matchDetails.direction);
+            var direction = matchDetails.direction;
+            if (direction.substr(0,4)=='back') direction='previous';
+            if (direction=='on' || direction=='forward') direction='next';
+            var number=1;
+            if (matchDetails.number) number=assistant.convertNumber(matchDetails.number);
+
+            assistant.manager.audioPlayer(player,direction,number);
             return {};
         }
     },{

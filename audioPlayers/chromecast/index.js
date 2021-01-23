@@ -94,6 +94,10 @@ audioPlayer.prototype.launch = function() {
             });
         });
     });
+    this.client.on('error', function(err) {
+        console.log('Chromecast error: '+err.message);
+    });
+});
 }
 
 audioPlayer.prototype.playerAction = function( callback ) {
@@ -176,7 +180,6 @@ audioPlayer.prototype.makeTemporaryPlaylist = function( tracks ) {
     const tempDir = fs.mkdtempSync(tempPath)
     const tempFile = tempDir+'/playlist.m3u8';
     console.log('Create temporary playlist: '+tempFile);
-    console.log(trackList);
     fs.writeFileSync(tempFile, trackList);
     
     setTimeout(function() {

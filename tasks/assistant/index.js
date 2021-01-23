@@ -49,19 +49,18 @@ The following built in match functions are defined
 const phrasebook = {
     commandHeader   : '[(polite:[please])] [[can|could|will] you]',
     commandTrailer  : '[for me] [(polite:[please])]',
-    /* Use these if the TTS engine returns numbers as words
+
+    // Use these if the TTS engine returns numbers as words
     // Numbers
-    number1To19     : '[a|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen]',
-    number1To99     : '[$number1To19|[twenty|thirty|fourty|fifty|sixty|seventy|eighty|ninety] [|one|two|three|four|five|six|seven|eight|nine]]',
-    number1To999    : '[$number1To99|$number1To19 hundred [[and] $number1To99]|$number1To99 $number1To99]',
-    number1To999999 : '[$number1To999|$number1To999 thousand [[and] $number1To999]]',
-    number1To999999999 : '[$number1To999999|(millions:$number1To999) million [[and] $number1To999999]]',
+    singleDigitIntegerWords     : '[a|one|two|three|four|five|six|seven|eight|nine]',
+    doubleDigitIntegerWords     : '[[$singleDigitIntegerWords|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen]|[twenty|thirty|fourty|fifty|sixty|seventy|eighty|ninety] [|$singleDigitIntegerWords]]',
+    tripleDigitIntegerWords     : '[$doubleDigitIntegerWords|[$singleDigitIntegerWords|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen] hundred [[and] $doubleDigitIntegerWords]|$singleDigitIntegerWords $doubleDigitIntegerWords]',
     // Durations
-    secondsDuration : '$number1To999999 second[s]',
-    minutesDuration : '[$secondsDuration|$number1To999 minute[s] [[and] $secondsDuration]]',
-    hoursDuration : '[$minutesDuration|$number1To99 hour[s] [[and] $minutesDuration]]',
-    daysDuration : '[$hoursDuration|$number1To999 day[s] [[and] $hoursDuration]]',
-    */
+    secondsDurationWords : '$number1To999999 second[s]',
+    minutesDurationWords : '[$secondsDurationWords|$tripleDigitIntegerWords minute[s] [[and] $secondsDurationWords]]',
+    hoursDurationWords : '[$minutesDurationWords|$doubleDigitIntegerWords hour[s] [[and] $minutesDurationWords]]',
+    daysDurationWords : '[$hoursDurationWords|$tripleDigitIntegerWords day[s] [[and] $hoursDurationWords]]',
+
     // Use these if the TTS engine returns numbers as digits
     secondsDuration : '[[1:a|one]|<number:1>] second[s]',
     minutesDuration : '[$secondsDuration|[[1:a|one]|<number:1>] minute[s] [[and] $secondsDuration]]',
@@ -89,10 +88,12 @@ function exhaustiveReplace( str, regex, replacement ) {
 }
 
 const numberLookup = {
-    a:1,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,thirty:30,fourty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90,hundred:100,thousand:1000,million:1000000
+    a:1,one:1,to:2,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,thirty:30,fourty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90,hundred:100,thousand:1000,million:1000000
 }
 
 function convertNumber(str) {
+    if (typeof(str)=='number') return str;
+    if (str.match(/^[0-9]+$/)) return parseInt(str);
     let parts = str.split(/\s+/g);
     parts = parts.map(part=>numberLookup.hasOwnProperty(part)?numberLookup[part]:part);
     number = parts.join(' ').replace(/\b(\d)0 (\d)\b/g,'$1$2');
@@ -278,6 +279,7 @@ Assistant.prototype.run = function( trigger, data ) {
     this.delayStart=0;
     
     this.trigger = trigger;
+    this.triggerData = data;
     if (this.trigger=='wakeword') {
         this.manager.play('sounds/bleep.mp3');
         this.artificialUtterances = false;
@@ -338,10 +340,14 @@ Assistant.prototype.heard = function( utterance ) {
     // Remove punctuation etc
     utterance = utterance.toLowerCase().replace(/[^a-z0-9% ]+/g,'');
 
-    // If they didn't say anything - or they said a stop work then stop listening
+    // If they didn't say anything - or they said a stop word then stop listening
     // but not if the last handler put us in a context where it wants to handle stop words
     if (!this.contextHandlesStop && (!utterance.length || stopWords.includes( utterance ))) {
         console.log('finishing');
+
+        // Record this as a false positive
+        if (typeof(this.triggerData)=='object' && this.triggerData.hasOwnProperty('wakeWordFalsePositiveRecordCallback')) this.triggerData.wakeWordFalsePositiveRecordCallback();
+
 		this.done();
 		return false;
 	}
@@ -361,6 +367,10 @@ Assistant.prototype.heard = function( utterance ) {
         let result = contexts[validContexts[i]].match( utterance );
         // Handle recognized stuff first
         if ( typeof( result.handler ) == 'function' ) {
+
+            console.log('Trigger data',this.triggerData);
+            // Looks like we've got a true positive hit on the wakeWord
+            if (typeof(this.triggerData)=='object' && this.triggerData.hasOwnProperty('wakeWordTruePositiveRecordCallback')) this.triggerData.wakeWordTruePositiveRecordCallback();
             
             if (result.textMatchData.ignoreDelay) delete result.textMatchData.delayStartDuration;
             
@@ -495,6 +505,8 @@ Assistant.prototype.heard = function( utterance ) {
 
 	// Didn't recognize the utterance - or no handler defined
     this.manager.say('Sorry. I don\'t understand.',true,function(){ self.done(); });
+    // In this case record the false positive if a handler was passed for doing this
+    if (typeof(this.triggerData)=='object' && this.triggerData.hasOwnProperty('wakeWordFalsePositiveRecordCallback')) this.triggerData.wakeWordFalsePositiveRecordCallback();
     return false;    
 }
 
@@ -606,5 +618,7 @@ Assistant.prototype.indefiniteArticle = function(phrase) {
 
     return "a ";
 }
+
+Assistant.prototype.convertNumber = convertNumber;
 
 module.exports = Assistant;

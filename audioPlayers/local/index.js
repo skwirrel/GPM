@@ -150,12 +150,14 @@ audioPlayer.prototype.pause = function() {
     return true;
 }
 
-audioPlayer.prototype.next = function() {
-    this.sendCommand('pt_step +1');
+audioPlayer.prototype.next = function(count) {
+    if (!count) count=1;
+    this.sendCommand('pt_step +'+count);
 }
 
-audioPlayer.prototype.previous = function() {
-    this.sendCommand('pt_step -1');
+audioPlayer.prototype.previous = function(count) {
+    if (!count) count=1;
+    this.sendCommand('pt_step -'+count);
 }
 
 audioPlayer.prototype.makeTemporaryPlaylist = function( tracks ) {
@@ -168,7 +170,6 @@ audioPlayer.prototype.makeTemporaryPlaylist = function( tracks ) {
     const tempDir = fs.mkdtempSync(tempPath)
     const tempFile = tempDir+'/playlist.m3u8';
     console.log('Create temporary playlist: '+tempFile);
-    console.log(trackList);
     fs.writeFileSync(tempFile, trackList);
     
     setTimeout(function() {
